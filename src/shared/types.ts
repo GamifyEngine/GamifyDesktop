@@ -129,7 +129,8 @@ export interface ChatQuestionRequest {
 /**
  * Which chat model a message runs on: the everyday Medium model or the
  * heavyweight Large model for tough tasks (more capable, may cost more).
- * The image model is not a tier — it only powers the image subagents.
+ * Both must accept image input — the same model reads attached images and
+ * game screenshots, and runs the game-tester subagent.
  */
 export type ChatModelTier = 'medium' | 'large'
 
@@ -166,8 +167,6 @@ export interface SetupStatus {
   medium: ModelSlotStatus
   /** Heavyweight chat model for tough tasks. */
   large: ModelSlotStatus
-  /** Image-enabled model that powers the image-reader and game-tester subagents. */
-  image: ModelSlotStatus
   /** True when Tencent HY 3D credentials are stored (enables 3D asset generation). */
   hy3dConfigured: boolean
   /** True when an OpenAI key is stored (enables 2D image asset generation). */
@@ -192,7 +191,6 @@ export interface ModelSlotRequest {
 export interface SetupRequest {
   medium: ModelSlotRequest
   large: ModelSlotRequest
-  image: ModelSlotRequest
   /** Optional asset-generation credentials (blank = unchanged). */
   tencentSecretId?: string
   tencentSecretKey?: string
@@ -229,7 +227,7 @@ export interface ChatPartUpdate {
     title?: string
     /** Failure reason when status is 'error' — tooltip on the chip. */
     error?: string
-    /** Set when a subagent (game-tester, image-reader) ran this tool — the chip is labelled with it. */
+    /** Set when a subagent (game-tester) ran this tool — the chip is labelled with it. */
     agent?: string
   }
 }

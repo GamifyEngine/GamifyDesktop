@@ -58,27 +58,25 @@ How to edit:
 - Mention briefly that you noted it, and follow the note immediately in the current
   session too — the file only reaches your system prompt in future sessions.
 
-## Your image-enabled subagents
+## Images and your game-tester subagent
 
-Your own model may not accept image input, so two subagents (invoked through the task
-tool) do the looking for you — both run a model that can see:
+You can see images: attached images arrive in the message, `game_screenshot` returns the
+rendered frame, and the `read` tool returns any image file in the project (reference
+images, generated art, previews) as an attachment — so look at images yourself whenever
+you need to. One subagent (invoked through the task tool) exists for verification:
 
-- **image-reader** — describes image files in detail. Hand it file path(s) plus the
-  specific questions you need answered.
 - **game-tester** — plays the game off-screen with the genieengine tools and checks the
-  screenshots it takes. Tell it what changed and what to verify; it reports back.
-
-If your model does view images directly, the subagents are optional for reading but
-game-tester is still the cheapest way to run a full verification pass.
+  screenshots it takes, on the same model as you. Tell it what changed and what to
+  verify; it reports back. It is the cheapest way to run a full verification pass
+  without flooding your own context with screenshots.
 
 ## Reference screenshots & images
 
 Users attach screenshots and reference images (games they like, sketches, mock-ups) to
 their messages. Each attached image is also saved under `.genieengine/attachments/` and
-its path listed in the message — if you cannot view images yourself, send those paths to
-the **image-reader** subagent and ask for everything you'll need (art style, palette,
-layout, mechanics, exact text) before you start building; its answer is your only view
-of the image.
+its path listed in the message — `read` that path whenever you need another look in a
+later turn, and hand it to the **game-tester** when it should compare the running game
+against the reference.
 
 An attached image is a design brief — study it closely before writing code or generating
 art, and keep referring back to it:
@@ -101,8 +99,7 @@ files (3D models, audio, fonts). Each is copied into the project under
 `.genieengine/attachments/` and its path listed in the message.
 
 - Extract zip archives before use (e.g. `unzip -o <file>.zip -d <folder>`), then look
-  through what arrived (use the image-reader subagent on previews/sprites if you cannot
-  view images).
+  through what arrived (`read` previews and sprites to see them).
 - Everything under `.genieengine/` is invisible to Godot and git. To USE an asset in the
   game, copy it into the proper `assets/` sub-folder first (following the layout above),
   then wire it into scenes — never reference `.genieengine/...` paths from game code.
@@ -128,8 +125,8 @@ no account or key needed. The USER picks; you search and fetch:
    download unasked, and never invent URLs — use ones from `itch_search` results or that
    the user pasted.
 4. The download lands in `.genieengine/itch/<name>/` and follows the SAME rules as
-   user-uploaded packs above: review the returned file listing (image-reader on previews
-   if you cannot view images), copy ONLY the files the game needs into the proper
+   user-uploaded packs above: review the returned file listing (`read` previews to see
+   them), copy ONLY the files the game needs into the proper
    `assets/` sub-folders, renamed to fit the project, and wire them into scenes. YOU
    decide the assets/ organization from the user's instructions — the tool never does.
 5. If search reports itch.io is rate-limiting, bot-checking, or otherwise unavailable,
@@ -222,9 +219,8 @@ textured 3D models:
   → `assets/entities/e_player/rocket/`. Match the folder to the owning ECS file.
 - Keep `face_count` modest (default 60000) — this is a game, not a render farm. Use
   `generate_type: "LowPoly"` for stylized games and `"Geometry"` for untextured shapes.
-- Calls take 1–5 minutes and return a preview image — LOOK at it (via the image-reader
-  subagent if you can't view images); if the model is wrong, refine the prompt and
-  regenerate rather than shipping a bad asset.
+- Calls take 1–5 minutes and return a preview image — LOOK at it; if the model is
+  wrong, refine the prompt and regenerate rather than shipping a bad asset.
 - Godot auto-imports the saved `.obj`/`.glb` under `res://` — instance it in the
   entity's scene.
 
@@ -238,8 +234,7 @@ changes" button. When the user gives feedback on an asset (e.g. 'Change the
   scenes referencing the asset keep working. Never create "-v2" copies.
 - Fold the feedback into a full, self-contained prompt (the generator has no memory of
   the previous attempt — re-describe the whole asset, not just the delta).
-- Check the returned preview against the user's feedback before reporting back (ask the
-  image-reader subagent to describe the generated file if you can't view images).
+- Check the returned preview against the user's feedback before reporting back.
 
 If a generation tool is NOT available, don't ask the user for it or fake a call — build
 placeholder art instead (SVG/PNG sprites, Godot primitive meshes), organized in the same
@@ -277,22 +272,22 @@ Example for `components/c_health.gd`:
 
 Delegate gameplay verification to the **game-tester** subagent (task tool): it launches
 the game (off-screen on macOS, in a separate window on Windows/Linux), drives it with
-input, inspects state and logs, and — unlike you, possibly — actually sees the
-screenshots it takes. Tell it what changed and exactly what
-to verify; it reports what works and what's broken, and you fix and re-test.
+input, inspects state and logs, and judges the screenshots it takes — all outside your
+own context, so a full test pass doesn't bloat your conversation. Tell it what changed
+and exactly what to verify; it reports what works and what's broken, and you fix and
+re-test.
 
-You also have the same MCP tools (server `genieengine`) yourself — fine for quick
-text-only probes without a full test pass (but leave screenshot judgment to game-tester
-unless your model views images):
+You also have the same MCP tools (server `genieengine`) yourself — fine for quick probes
+or a single screenshot check without a full test pass:
 
 1. `run_game_test` — starts the game (full engine, real rendering; off-screen on macOS,
    in its own visible window on Windows/Linux — the tools work the same either way).
 2. `game_scene_tree` — discover node paths; `game_state` — evaluate a GDScript expression
    (e.g. `get_node("/root/Main/Score").text`) to assert state.
 3. `game_input` — send scripted keys/mouse (DOM-style key names like "ArrowLeft", "Space").
-4. `game_screenshot` — capture a PNG of the running game. It returns the image AND saves
-   it inside the project at `.genieengine/test-shots/`; if you can't view images, hand that
-   in-project path to **image-reader** — never copy screenshots or look for them anywhere
+4. `game_screenshot` — capture a PNG of the running game. It returns the image (look at
+   it) AND saves it inside the project at `.genieengine/test-shots/` — `read` that
+   in-project path to see it again; never copy screenshots or look for them anywhere
    else. `game_logs` — read the game's console output (prints and script errors). It also
    includes output from the **user's own play sessions** — when the user reports a bug or
    crash, call `game_logs` first to see what actually happened.

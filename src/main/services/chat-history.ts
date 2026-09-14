@@ -12,9 +12,10 @@ import type { ChatAttachment } from '../../shared/types'
  * - input-history.json  every message the user has sent, for ↑/↓ recall in
  *                       the composer. Intentionally survives /clear.
  * - attachments/        files the user attached to messages: images saved so
- *                       the AI's image-enabled subagents can open them by
- *                       path, plus asset uploads (zips/folders/models) copied
- *                       here so the sandboxed assistant can reach them at all.
+ *                       the AI (and its game-tester subagent) can re-open them
+ *                       by path in later turns, plus asset uploads
+ *                       (zips/folders/models) copied here so the sandboxed
+ *                       assistant can reach them at all.
  * - test-shots/         screenshots the AI takes of the running game (written
  *                       by test-harness.ts) — in-project so agents can read
  *                       them without leaving the project directory.
@@ -216,11 +217,11 @@ async function ensureAttachmentsDir(projectPath: string): Promise<string> {
 
 /**
  * Writes message attachments into .genieengine/attachments/ and returns their
- * project-relative paths (POSIX-style, ready for the message text). Saving to
- * disk is what lets an image reach the image-enabled subagents: they never
- * see the data URLs riding the chat message — a file path handed through the
- * task tool plus the `read` tool is their only way in. The main model may not
- * accept image input at all, so the path can be the image's only usable form.
+ * project-relative paths (POSIX-style, ready for the message text). The image
+ * also rides the message as a file part, but the path is what lets the model
+ * look at it again in later turns (via the `read` tool) and what lets the
+ * game-tester subagent see it: a subagent never sees the parent's message
+ * parts — a path handed through the task tool is its only way in.
  */
 export async function saveChatAttachments(
   projectPath: string,

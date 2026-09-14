@@ -12,7 +12,7 @@ import { loadTranscriptRecap, saveChatAttachments, saveChatUploads, type SavedUp
 // import shutdownChat): all sides only use the other's exports at call time,
 // never during module evaluation.
 import { agentInstructionsPath, genieengineMcpEntry } from './opencode-config'
-import { GAME_TESTER_AGENT, IMAGE_READER_AGENT, resolveChatModel } from './opencode-setup'
+import { GAME_TESTER_AGENT, resolveChatModel } from './opencode-setup'
 import { getHarnessEndpoint } from './test-harness'
 import type { ChatAttachment, ChatModelTier, ChatPartUpdate, ChatToolStatus } from '../../shared/types'
 
@@ -252,7 +252,7 @@ function handleEvent(evt: any): void {
       // Relay their tool calls — labelled, tools only; their text/reasoning
       // belongs to the subagent's own report, not the main transcript.
       const agent = messageMeta.get(props.part.messageID)?.agent
-      if (agent !== GAME_TESTER_AGENT && agent !== IMAGE_READER_AGENT) return
+      if (agent !== GAME_TESTER_AGENT) return
       const update = translatePart(props.part)
       if (update?.kind === 'tool' && update.tool) {
         sendToRenderer('chat:part', { ...update, tool: { ...update.tool, agent } })
@@ -568,8 +568,9 @@ function api<T>(srv: OpencodeServer, method: string, path: string, body?: unknow
  * The most common first-run failure is a configured model whose provider has
  * no credentials (OpenCode then 500s with an opaque "UnknownError"). Check
  * proactively — both chat models (the dropdown can route any message to
- * either) AND the subagents' image model, each of which may use its own
- * provider — and explain exactly how to fix it.
+ * either, and the game-tester subagent inherits the turn's model) plus any
+ * model pinned on an agent in the user's own config — and explain exactly
+ * how to fix it.
  */
 async function assertProviderAvailable(srv: OpencodeServer): Promise<void> {
   if (srv.providerChecked) return
@@ -597,7 +598,7 @@ async function assertProviderAvailable(srv: OpencodeServer): Promise<void> {
   }
   if (missing) {
     // The settings panel writes keys for every provider we configure
-    // (including the `custom`/`image` openai-compatible ones, which
+    // (including the `medium`/`large` openai-compatible ones, which
     // `opencode auth login` has no named entry for) — point users there.
     throw new Error(
       `The AI provider "${missing}" isn't connected yet — its API key is missing.\n\n` +
@@ -743,12 +744,14 @@ export async function sendChatMessage(
   // can't split one turn across models (the resume nudges reuse it too).
   const model = await resolveChatModel(tier)
 
-  // Image attachments are additionally saved under .genieengine/attachments/
-  // and their paths appended to the message: the main coding model may not
-  // accept image input (OpenCode then replaces the file parts below with an
-  // "ERROR: Cannot read" note), and the image-enabled subagents can only
-  // reach an image through a file path. Best-effort — a failed save just
-  // means the message goes out the old way.
+  // Image attachments ride the message as file parts (every chat model must
+  // accept image input, see opencode-setup.ts) AND are saved under
+  // .genieengine/attachments/ with their paths appended: a path is how the
+  // model gets back to a reference image in later turns (the read tool
+  // returns image files as attachments) and how the game-tester subagent —
+  // which never sees the parent's message — can compare a screenshot against
+  // it. Best-effort — a failed save just means the message goes out the old
+  // way.
   // The recap rides inside this message rather than as its own turn: a
   // separate priming message would cost a full model round-trip. The renderer
   // shows its own copy of the user text, so the recap never appears in the UI.
@@ -759,8 +762,8 @@ export async function sendChatMessage(
     if (saved.length) {
       text +=
         `\n\n[The attached image${saved.length > 1 ? 's are' : ' is'} also saved at: ` +
-        `${saved.join(', ')} — if you cannot view images yourself, delegate to the ` +
-        `image-reader subagent with the path${saved.length > 1 ? 's' : ''}.]`
+        `${saved.join(', ')} — re-read ${saved.length > 1 ? 'these paths' : 'this path'} ` +
+        'whenever you need another look, and hand it to the game-tester to compare against.]'
     }
   }
   // Asset uploads reach the model as paths only (copied above) — a zip or a

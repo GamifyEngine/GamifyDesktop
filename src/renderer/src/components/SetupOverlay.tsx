@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import type {
+  ChatModelTier,
   ModelSlotRequest,
   ModelSlotStatus,
   ReasoningEffort,
@@ -26,26 +27,23 @@ const TABS: { id: SetupTab; label: string }[] = [
 /** Mirrors the main process default — used to tell "same endpoint" from "own endpoint". */
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1'
 
-type SlotId = 'medium' | 'large' | 'image'
+type SlotId = ChatModelTier
 
-/** The three model sections on the Models tab, in display (and key-sharing donor) order. */
+/**
+ * The two model sections on the Models tab, in display (and key-sharing donor)
+ * order. Placeholders mirror the main-process defaults (opencode-setup.ts).
+ */
 const MODEL_SLOTS: { id: SlotId; title: string; hint: string; modelPlaceholder: string }[] = [
   {
     id: 'medium',
     title: 'Chat model — Medium',
-    hint: 'The everyday model that plans and writes your game’s code. Any OpenAI-compatible API endpoint will work.',
-    modelPlaceholder: 'deepseek/deepseek-v4-pro'
+    hint: 'The everyday model that plans and writes your game’s code, reads the images you attach, and play-tests your game with screenshots — so it must accept image input. Any OpenAI-compatible API endpoint will work.',
+    modelPlaceholder: 'deepseek/deepseek-v4.1-flash'
   },
   {
     id: 'large',
     title: 'Chat model — Large',
-    hint: 'A heavyweight model for tough tasks that need extra juice — switch to it from the dropdown in the chat box. Usually slower, and may cost more per message.',
-    modelPlaceholder: 'z-ai/glm-5.2'
-  },
-  {
-    id: 'image',
-    title: 'Image model',
-    hint: 'Runs the assistant’s image helpers — reading images you attach and play-testing your game with screenshots — so it must accept image input.',
+    hint: 'A heavyweight model for tough tasks that need extra juice — switch to it from the dropdown in the chat box. Usually slower, and may cost more per message. Must accept image input too.',
     modelPlaceholder: 'moonshotai/kimi-k2.7-code'
   }
 ]
@@ -105,8 +103,7 @@ function ConfiguredButton({ onClick }: { onClick: () => void }): React.JSX.Eleme
 
 /**
  * One model's connection settings: endpoint + model + API key. The Models tab
- * shows three — the Medium and Large chat models plus the image-enabled model
- * that runs the image-reader / game-tester subagents.
+ * shows two — the Medium and Large chat models.
  */
 function ModelSection(props: {
   title: string
@@ -225,17 +222,15 @@ function ModelSection(props: {
 /**
  * AI provider setup, shown over a darkened chat until the assistant is
  * connected (and reopenable later from the sidebar gear). Three tabs:
- * the models (any OpenAI-compatible endpoints — Medium and Large chat models
- * plus the image-enabled model behind the image-reader and game-tester
- * subagents), optional 2D asset generation (OpenAI gpt-image-1.5) and
- * optional 3D asset generation (Tencent HY 3D).
+ * the models (any OpenAI-compatible endpoints — the image-capable Medium and
+ * Large chat models), optional 2D asset generation (OpenAI gpt-image-1.5)
+ * and optional 3D asset generation (Tencent HY 3D).
  */
 export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JSX.Element {
   const [tab, setTab] = useState<SetupTab>('agent')
   const [slots, setSlots] = useState<Record<SlotId, SlotState>>(() => ({
     medium: initSlot(status.medium),
-    large: initSlot(status.large),
-    image: initSlot(status.image)
+    large: initSlot(status.large)
   }))
   const [tencentId, setTencentId] = useState('')
   const [tencentKey, setTencentKey] = useState('')
@@ -305,7 +300,6 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
     const result = await window.api.saveSetup({
       medium: slotRequest('medium'),
       large: slotRequest('large'),
-      image: slotRequest('image'),
       tencentSecretId: tencentId,
       tencentSecretKey: tencentKey,
       openaiApiKey: openaiKey
@@ -340,8 +334,8 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
             <h2 className="setup-title">{status.configured ? 'AI settings' : 'Connect your AI assistant'}</h2>
             <p className="setup-sub">
               GenieEngine's assistant is powered by OpenCode: Medium and Large chat models you can
-              switch between per message, plus image-enabled helpers that read your images and
-              play-test your game.
+              switch between per message. Both must accept image input — the assistant reads the
+              images you attach and play-tests your game with screenshots itself.
             </p>
           </div>
         </div>

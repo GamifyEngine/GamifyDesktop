@@ -139,7 +139,7 @@ const TOOLS = [
   {
     name: 'game_screenshot',
     description:
-      'Capture a PNG screenshot of the running test game. Returns the image and saves it inside the project at .genieengine/test-shots/ — if you cannot view images yourself, hand that saved path to the image-reader subagent. Never copy screenshots or read them from anywhere else.',
+      'Capture a PNG screenshot of the running test game. Returns the image (look at it) and saves it inside the project at .genieengine/test-shots/ — read that saved path to see it again later. Never copy screenshots or read them from anywhere else.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false }
   },
   {

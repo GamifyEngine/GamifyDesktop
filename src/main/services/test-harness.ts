@@ -58,7 +58,7 @@ const KEEP_SHOTS = 12
  * userData dir, and handing that ~/Library path to the model lured it into
  * reading/copying outside the project — which the permission policy rejects
  * (see opencode.ts) and killed agent runs. In-project, every agent (main,
- * image-reader, game-tester) can read a shot by its relative path freely.
+ * game-tester) can read a shot by its relative path freely.
  */
 async function pruneShots(dir: string): Promise<void> {
   try {
@@ -89,7 +89,7 @@ const SHOT_JPEG_QUALITY = 72
  * every step — measured runs slowed from ~4s to ~27s per step and eventually
  * drew 413/500 responses from the model provider. A 1024-wide JPEG (~10x
  * smaller) is plenty to judge layout, art, and HUD text. The full-resolution
- * PNG stays on disk for the user and the image-reader subagent.
+ * PNG stays on disk for the user and for later `read`s by the agents.
  */
 function shrinkShotForModel(png: Buffer): { base64: string; mime: string } {
   try {
@@ -172,8 +172,8 @@ async function dispatchTool(name: string, args: Record<string, unknown>): Promis
         ok: true,
         text:
           `Screenshot saved inside the project at .genieengine/test-shots/${file}. ` +
-          'If you cannot view the attached image yourself, pass that path to the ' +
-          'image-reader subagent — it reads it directly; never copy screenshots elsewhere.',
+          'Look at the attached image now; read that path to see it again later — ' +
+          'never copy screenshots elsewhere.',
         imageBase64: shot.base64,
         imageMime: shot.mime
       }

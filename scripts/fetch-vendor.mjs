@@ -13,12 +13,25 @@
  * Extraction only needs tools available on the *host* (tar/ditto/unzip), not
  * the target platform, so this works cross-platform from a POSIX host.
  *
- * Versions are pinned so every build bundles exactly what was tested.
+ * Versions are pinned so every build bundles exactly what was tested. Each
+ * target directory carries a `.version` stamp of what it holds, so bumping a
+ * pin here replaces the stale binaries on the next run instead of silently
+ * keeping the old ones (which is what an existence-only check used to do).
  * (Git is bundled separately via the `dugite` npm dependency.)
  */
 import { execFileSync } from 'node:child_process'
-import { chmodSync, createWriteStream, existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync } from 'node:fs'
-import { dirname, join, resolve } from 'node:path'
+import {
+  chmodSync,
+  createWriteStream,
+  existsSync,
+  mkdirSync,
+  readdirSync,
+  readFileSync,
+  renameSync,
+  rmSync,
+  writeFileSync
+} from 'node:fs'
+import { dirname, join, relative, resolve } from 'node:path'
 import { Readable } from 'node:stream'
 import { pipeline } from 'node:stream/promises'
 import { fileURLToPath } from 'node:url'
@@ -27,7 +40,7 @@ const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const VENDOR = join(ROOT, 'vendor')
 
 const GODOT_VERSION = '4.7.1'
-const OPENCODE_VERSION = 'v1.17.13'
+const OPENCODE_VERSION = 'v1.18.30'
 
 function argValue(flag) {
   const arg = process.argv.find((a) => a.startsWith(`--${flag}=`))
@@ -45,6 +58,7 @@ function godotTarget() {
   if (platform === 'darwin') {
     return {
       url: `${base}_macos.universal.zip`,
+      version: GODOT_VERSION,
       dir: join(VENDOR, 'godot', 'darwin'),
       check: join(VENDOR, 'godot', 'darwin', 'Godot.app', 'Contents', 'MacOS', 'Godot')
     }
@@ -53,6 +67,7 @@ function godotTarget() {
     const asset = arch === 'arm64' ? '_windows_arm64.exe.zip' : '_win64.exe.zip'
     return {
       url: `${base}${asset}`,
+      version: GODOT_VERSION,
       dir: join(VENDOR, 'godot', 'win32'),
       check: join(VENDOR, 'godot', 'win32', 'godot.exe'),
       renameTo: 'godot.exe'
@@ -61,6 +76,7 @@ function godotTarget() {
   const asset = arch === 'arm64' ? '_linux.arm64.zip' : '_linux.x86_64.zip'
   return {
     url: `${base}${asset}`,
+    version: GODOT_VERSION,
     dir: join(VENDOR, 'godot', 'linux'),
     check: join(VENDOR, 'godot', 'linux', 'godot'),
     renameTo: 'godot'
@@ -83,12 +99,15 @@ function koffiTarget() {
   const dir = join(VENDOR, 'koffi', 'win32')
   return {
     url: `https://registry.npmjs.org/@koromix/${pkg}/-/${pkg}-${version}.tgz`,
+    version,
     dir,
     check: join(dir, triplet, 'koffi.node'),
     // npm tarballs root everything under package/; keep just the triplet dir
     // koffi's loader looks for, and only the .node inside it (the tarball
     // also carries .lib/.exp linker artifacts the app never needs).
-    finalize: () => {
+    // Receives the directory the archive was extracted into (a staging dir
+    // while fetching — see fetchTarget), so it must not close over `dir`.
+    finalize: (dir) => {
       rmSync(join(dir, triplet), { recursive: true, force: true })
       renameSync(join(dir, 'package', triplet), join(dir, triplet))
       rmSync(join(dir, 'package'), { recursive: true, force: true })
@@ -105,6 +124,7 @@ function opencodeTarget() {
   const bin = os === 'windows' ? 'opencode.exe' : 'opencode'
   return {
     url: `https://github.com/sst/opencode/releases/download/${OPENCODE_VERSION}/opencode-${os}-${arch}.${ext}`,
+    version: OPENCODE_VERSION,
     dir: join(VENDOR, 'opencode', platform),
     check: join(VENDOR, 'opencode', platform, bin)
   }
@@ -133,37 +153,65 @@ function extract(archive, dir) {
   }
 }
 
+/** What a target directory currently holds, as `<version> <arch>` (arch matters when cross-fetching). */
+function stampFor(target) {
+  return `${target.version} ${arch}`
+}
+
 async function fetchTarget(label, target) {
-  if (existsSync(target.check)) {
+  const stampFile = join(target.dir, '.version')
+  const stamp = existsSync(stampFile) ? readFileSync(stampFile, 'utf8').trim() : null
+  if (existsSync(target.check) && stamp === stampFor(target)) {
     console.log(`✓ ${label} already present`)
     return
   }
-  console.log(`… fetching ${label}`)
-  mkdirSync(target.dir, { recursive: true })
+  const replacing = existsSync(target.dir)
+  console.log(replacing ? `… replacing ${label} (had ${stamp ?? 'an unversioned copy'})` : `… fetching ${label}`)
+
+  // Download and extract into a staging directory next to the real one and
+  // swap only once everything checks out: a failed or interrupted download
+  // then leaves the previous copy in place (an earlier version deleted the
+  // old directory first and left vendor/ empty when the network dropped).
+  // Targets are expressed relative to target.dir, so re-point them at the
+  // staging dir for the duration.
+  const finalDir = target.dir
+  const stagingDir = `${finalDir}.staging`
+  const staged = {
+    ...target,
+    dir: stagingDir,
+    check: join(stagingDir, relative(finalDir, target.check)),
+    finalize: target.finalize ? () => target.finalize(stagingDir) : undefined
+  }
+  rmSync(stagingDir, { recursive: true, force: true })
+  mkdirSync(stagingDir, { recursive: true })
   // Preserve the real extension so extract() can tell a gzip tarball from a
   // .zip — matters once we're fetching non-host targets (e.g. Linux's .tar.gz
   // or npm's .tgz from macOS).
   const gzipTarball = target.url.endsWith('.tar.gz') || target.url.endsWith('.tgz')
-  const archive = join(target.dir, gzipTarball ? '_download.tgz' : '_download.zip')
+  const archive = join(stagingDir, gzipTarball ? '_download.tgz' : '_download.zip')
   try {
     await download(target.url, archive)
-    extract(archive, target.dir)
-    if (target.renameTo) {
+    extract(archive, stagingDir)
+    rmSync(archive, { force: true })
+    if (staged.renameTo) {
       // Godot archives contain a versioned binary name; normalize it so the
       // app can resolve it without knowing the bundled version.
-      const extracted = readdirSync(target.dir).find(
+      const extracted = readdirSync(stagingDir).find(
         (f) => f.startsWith('Godot_v') && !f.endsWith('_console.exe') && !f.endsWith('.tmp')
       )
-      if (extracted) renameSync(join(target.dir, extracted), join(target.dir, target.renameTo))
+      if (extracted) renameSync(join(stagingDir, extracted), join(stagingDir, staged.renameTo))
     }
-    if (target.finalize) target.finalize()
+    if (staged.finalize) staged.finalize()
     // Executable bit is meaningless on Windows but harmless to set from a
     // POSIX host when cross-fetching the win32 target's binaries.
-    if (host !== 'win32' && existsSync(target.check)) chmodSync(target.check, 0o755)
-    if (!existsSync(target.check)) throw new Error(`extraction did not produce ${target.check}`)
+    if (host !== 'win32' && existsSync(staged.check)) chmodSync(staged.check, 0o755)
+    if (!existsSync(staged.check)) throw new Error(`extraction did not produce ${staged.check}`)
+    writeFileSync(join(stagingDir, '.version'), stampFor(target))
+    rmSync(finalDir, { recursive: true, force: true })
+    renameSync(stagingDir, finalDir)
     console.log(`✓ ${label} ready`)
   } finally {
-    rmSync(archive, { force: true })
+    rmSync(stagingDir, { recursive: true, force: true })
   }
 }
 

@@ -3,7 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
-import { applyAgentConfig, configuredImageModel } from './opencode-setup'
+import { applyAgentConfig } from './opencode-setup'
 
 /**
  * Keeps GenieEngine's entries in the user's global OpenCode config
@@ -18,10 +18,10 @@ import { applyAgentConfig, configuredImageModel } from './opencode-setup'
  *    sessions launched outside the app (e.g. a terminal); servers the app
  *    spawns get a per-spawn override pointing at their own instance instead
  *    (see genieengineMcpEntry).
- *  - `agent.image-reader` / `agent.game-tester` — the image-enabled subagents
- *    (see opencode-setup.ts). Re-applied here so users who never reopen the
- *    settings panel (upgrades) still get them, and so prompt/tool refinements
- *    ship with app updates. The models the user picked are preserved.
+ *  - `agent.game-tester` — the game-testing subagent (see opencode-setup.ts).
+ *    Re-applied here so users who never reopen the settings panel (upgrades)
+ *    still get it, so prompt/tool refinements ship with app updates, and so
+ *    the retired image-model slot's leftovers are removed from old configs.
  *
  * Everything else in the config is the user's and is left untouched.
  */
@@ -113,7 +113,7 @@ export async function ensureOpencodeConfig(): Promise<void> {
     experimental.continue_loop_on_deny = true
     config.experimental = experimental
 
-    applyAgentConfig(config, configuredImageModel(config))
+    applyAgentConfig(config)
 
     if (!config.$schema) config.$schema = 'https://opencode.ai/config.json'
     if (JSON.stringify(config) === before) return

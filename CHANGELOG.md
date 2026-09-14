@@ -2,6 +2,12 @@
 
 All notable changes to GenieEngine are documented here.
 
+## [Unreleased]
+
+### Changed
+- The separate image model is gone: the chat model now reads attached images and game screenshots itself, and the game-tester subagent runs on whichever chat model (Medium or Large) the current turn uses. Both chat models must therefore accept image input; the AI settings panel shows two model sections instead of three. Recommended models are now `deepseek/deepseek-v4.1-flash` (Medium) and `moonshotai/kimi-k2.7-code` (Large). The old image-model configuration and the image-reader subagent are removed from existing OpenCode configs automatically; models on custom (non-OpenRouter) endpoints are declared image-capable so screenshots are no longer stripped before reaching them
+- The bundled OpenCode CLI is updated from 1.17.13 to 1.18.30, and `npm run setup` now replaces bundled engines whose pinned version changed instead of keeping the previously downloaded copy
+
 ## [0.1.1] - 2026-07-10
 
 ### Added

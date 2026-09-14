@@ -66,14 +66,14 @@ the gear icon in the title bar). It has three tabs:
 **Models** — required; the model slots that power the assistant. Each slot takes any
 OpenAI-compatible **API endpoint** (defaults to **OpenRouter**, `https://openrouter.ai/api/v1`), a
 **Model**, an **API key**, and **Thinking** / **Reasoning effort** settings. Grab a key from
-[openrouter.ai/keys](https://openrouter.ai/keys) and paste it into the Medium slot — the Large and
-Image slots reuse it if you leave theirs blank. Recommended setup:
+[openrouter.ai/keys](https://openrouter.ai/keys) and paste it into the Medium slot — the Large slot
+reuses it if you leave its key blank. Both models must accept image input: the assistant reads the
+images you attach and play-tests your game with screenshots itself. Recommended setup:
 
 | Slot | What it does | Recommended model | Thinking | Reasoning effort |
 | --- | --- | --- | --- | --- |
-| **Chat model — Medium** | The everyday model that plans and writes your game's code | `deepseek/deepseek-v4-flash` | Enabled | Max |
-| **Chat model — Large** | A heavyweight model for tough tasks — switch to it from the dropdown in the chat box | `deepseek/deepseek-v4-pro` | Enabled | Max |
-| **Image model** | Reads images you attach and play-tests your game with screenshots — must accept image input | `moonshotai/kimi-k2.7-code` | Enabled | Max |
+| **Chat model — Medium** | The everyday model that plans and writes your game's code | `deepseek/deepseek-v4.1-flash` | Enabled | Max |
+| **Chat model — Large** | A heavyweight model for tough tasks — switch to it from the dropdown in the chat box | `moonshotai/kimi-k2.7-code` | Enabled | Max |
 
 **Asset generation** *(optional)* — two more tabs let the assistant create art straight into your
 project's assets folder:

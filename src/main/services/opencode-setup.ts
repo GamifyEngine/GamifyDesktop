@@ -16,8 +16,8 @@ import { isHy3dConfigured, saveHy3dCredentials } from './hy3d'
 import { shutdownChat } from './opencode'
 
 /**
- * Provider setup for the AI chat, which runs as a small agent team over
- * THREE configurable model slots:
+ * Provider setup for the AI chat, which runs over TWO configurable model
+ * slots:
  *
  *  - MEDIUM — the everyday chat/coding model. It is the default for chat
  *    messages and doubles as the global `model` in the OpenCode config, so
@@ -26,47 +26,47 @@ import { shutdownChat } from './opencode'
  *    it per-conversation from the chat box. Both chat models are named
  *    explicitly on every message the app sends (see sendChatMessage), which
  *    is what lets one conversation continue seamlessly across a switch.
- *  - IMAGE — the image-enabled model behind the two subagents declared under
- *    `agent` in the same config:
- *      · image-reader — describes image files (user-uploaded references,
- *        generated art) to the chat agent, which may not see images itself;
- *      · game-tester  — plays the game via the genieengine MCP tools and
- *        verifies the screenshots it takes.
+ *
+ * Both models MUST accept image input: the chat agent itself reads the
+ * images the user attaches and the screenshots the game tools return, and
+ * the game-tester subagent (declared under `agent` in the same config, see
+ * applyAgentConfig) runs on whichever chat model the current turn uses.
+ * Earlier versions kept a third, image-only model slot for the subagents
+ * because the chat models of the day could not see; that separation is
+ * gone, and the legacy `image` provider / `image-reader` agent entries it
+ * left in existing configs are cleaned up here.
  *
  * Every slot has its own endpoint + API key. Keys go into OpenCode's
  * credential store (auth.json, the same file `opencode auth login` writes);
- * endpoints + models go into the global OpenCode config. Chat slots on the
+ * endpoints + models go into the global OpenCode config. Slots on the
  * OpenRouter endpoint map to OpenCode's built-in `openrouter` provider
- * (keeping models.dev metadata like context limits and reasoning support);
- * chat slots on other endpoints get openai-compatible provider entries under
- * the STABLE ids `medium` / `large`.
- *
- * The image slot ALWAYS uses its own `image` provider entry — even on
- * OpenRouter, where the chat slots use the built-in provider. Earlier
- * versions derived the image slot's provider from a comparison with the chat
- * endpoint, which aliased both models onto one credential: updating the chat
- * key silently overwrote the image key, and changing the chat endpoint
- * stranded the image credential entirely. A fixed per-slot id makes that
- * impossible. "Leave the key blank to reuse the chat key" still works, but
- * as a COPY into the slot's own credential at save time, never as sharing.
+ * (keeping models.dev metadata like context limits, image support and
+ * reasoning support); slots on other endpoints get openai-compatible
+ * provider entries under the STABLE ids `medium` / `large`, each declaring
+ * its model as image-capable. Stable per-slot ids matter: deriving a slot's
+ * provider from a comparison with another slot's endpoint once aliased two
+ * models onto one credential, so updating one key silently overwrote the
+ * other. "Leave the key blank to reuse the Medium key" still works, but as
+ * a COPY into the slot's own credential at save time, never as sharing.
  */
 
 export const DEFAULT_ENDPOINT = 'https://openrouter.ai/api/v1'
-export const DEFAULT_MEDIUM_MODEL = 'deepseek/deepseek-v4-pro'
-export const DEFAULT_LARGE_MODEL = 'z-ai/glm-5.2'
-export const DEFAULT_IMAGE_MODEL = 'moonshotai/kimi-k2.7-code'
+export const DEFAULT_MEDIUM_MODEL = 'deepseek/deepseek-v4.1-flash'
+export const DEFAULT_LARGE_MODEL = 'moonshotai/kimi-k2.7-code'
 
 /** Provider id OpenCode's built-in OpenRouter support registers under. */
 const OPENROUTER_PROVIDER = 'openrouter'
 /** Provider id older versions used for a custom main-model endpoint (read for migration only). */
 const LEGACY_CUSTOM_PROVIDER = 'custom'
-/** Stable per-slot provider ids for models on non-OpenRouter endpoints (chat) / any endpoint (image). */
+/** Stable per-slot provider ids for models on non-OpenRouter endpoints. */
 const MEDIUM_PROVIDER = 'medium'
 const LARGE_PROVIDER = 'large'
-const IMAGE_PROVIDER = 'image'
+/** Provider id of the retired image-only slot (removed from configs that still carry it). */
+const LEGACY_IMAGE_PROVIDER = 'image'
 
-export const IMAGE_READER_AGENT = 'image-reader'
 export const GAME_TESTER_AGENT = 'game-tester'
+/** Subagent the retired image slot powered — pointless now that the chat model sees images itself. */
+const LEGACY_IMAGE_READER_AGENT = 'image-reader'
 
 function configPath(): string {
   return join(homedir(), '.config', 'opencode', 'opencode.json')
@@ -111,6 +111,14 @@ interface ProviderEntry extends Record<string, unknown> {
   models?: Record<string, Record<string, unknown>>
 }
 
+/**
+ * Capability declaration for a model on an openai-compatible provider entry.
+ * Such models aren't in models.dev, so without this OpenCode assumes they
+ * can't see and swaps every image part (attached references, game
+ * screenshots) for an "ERROR: Cannot read image" note before the request.
+ */
+const IMAGE_CAPABLE_MODEL = { attachment: true, modalities: { input: ['text', 'image'], output: ['text'] } }
+
 const THINKING_MODES: ThinkingMode[] = ['default', 'enabled', 'disabled']
 const REASONING_EFFORTS: ReasoningEffort[] = ['default', 'low', 'medium', 'high', 'xhigh', 'max']
 
@@ -128,8 +136,11 @@ function coerceEffort(value: unknown): ReasoningEffort {
  * its own defaults). On the wire both spellings become the standard
  * OpenAI-format request fields `thinking: {"type": ...}` / `reasoning_effort`
  * (per https://api-docs.deepseek.com/guides/thinking_mode/) — but the
- * spelling OpenCode wants differs per provider package (probed against the
- * bundled OpenCode 1.17.13):
+ * spelling OpenCode wants differs per provider package (probed against
+ * OpenCode 1.17.13; 1.18.30 pins the same @ai-sdk/openai-compatible 2.0.41
+ * and @openrouter/ai-sdk-provider 2.9.0 and passes per-model options through
+ * unchanged under the provider's key — see providerOptions in its
+ * provider/transform.ts):
  *
  *  - @ai-sdk/openai-compatible passes `thinking` through verbatim and maps
  *    camelCase `reasoningEffort` → `reasoning_effort` (verbatim snake_case is
@@ -156,14 +167,6 @@ function agentEntries(config: Record<string, unknown>): Record<string, Record<st
   return (config.agent ?? {}) as Record<string, Record<string, unknown>>
 }
 
-/** The `provider/model` currently assigned to the subagents (default when unset). */
-export function configuredImageModel(config: Record<string, unknown>): string {
-  const current = agentEntries(config)[IMAGE_READER_AGENT]?.model
-  return typeof current === 'string' && current
-    ? current
-    : `${OPENROUTER_PROVIDER}/${DEFAULT_IMAGE_MODEL}`
-}
-
 /**
  * The stored `provider/model` ref for a chat tier: the app settings first,
  * then the legacy single `config.model` (versions before the Medium/Large
@@ -188,61 +191,38 @@ export async function resolveChatModel(tier: ChatModelTier): Promise<{ providerI
 }
 
 /**
- * (Re)writes GenieEngine's agent team into an OpenCode config object: the two
- * image-enabled subagents the main coding agent delegates to. Called on every
+ * (Re)writes GenieEngine's managed entries into an OpenCode config object:
+ * the game-tester subagent the main coding agent delegates verification to,
+ * minus the leftovers of the retired image-only model slot. Called on every
  * setup save AND at app startup (so app updates refresh prompts/tools without
- * the user re-running setup — see ensureOpencodeConfig). Agents under other
- * names are the user's own and are left alone.
+ * the user re-running setup — see ensureOpencodeConfig). Agents and providers
+ * under other names are the user's own and are left alone.
  *
- * Both subagents get the image model: their whole value over the main agent
- * is that they can actually see — the read tool returns image files as
- * attachments, and game_screenshot returns the rendered frame.
+ * The subagent declares no `model`: OpenCode then runs it on the model of the
+ * turn that spawned it, so the game-tester follows the user's Medium/Large
+ * choice automatically and sees screenshots because every chat model must
+ * accept image input (see the module comment).
  */
-export function applyAgentConfig(config: Record<string, unknown>, imageModelRef: string): void {
+export function applyAgentConfig(config: Record<string, unknown>): void {
   const agents = agentEntries(config)
 
-  agents[IMAGE_READER_AGENT] = {
-    description:
-      'Views image files and reports their contents in detail: user-attached references ' +
-      '(saved under .genieengine/attachments/), game screenshots (saved under ' +
-      '.genieengine/test-shots/), generated art, or any image in the project. ' +
-      'Give it the image path(s) and the questions you need answered.',
-    mode: 'subagent',
-    model: imageModelRef,
-    prompt:
-      'You are the image-analysis specialist inside GenieEngine, an AI game engine. Another ' +
-      'agent that may not be able to see images delegates image questions to you. Open every ' +
-      'image path you were given with the read tool, look carefully, and answer with a ' +
-      'precise, complete description — the caller cannot see the image, so your words are ' +
-      'all it gets.\n\n' +
-      'Always cover, when relevant:\n' +
-      '- Subject and composition: what is depicted, layout, camera/perspective (top-down, ' +
-      'side view, isometric, ...).\n' +
-      '- Art style: pixel art / vector / hand-drawn / 3D render, outline weight, shading, ' +
-      'level of detail.\n' +
-      '- Colors: the dominant palette with approximate hex values; whether the background ' +
-      'is transparent.\n' +
-      '- For game screenshots: apparent genre, HUD elements and their positions, visible ' +
-      'mechanics, menus, and all text transcribed exactly.\n' +
-      "- The caller's specific questions, answered directly.\n\n" +
-      'If a path does not exist or is not an image, say so plainly. You only look and ' +
-      'report — never modify anything.',
-    // Look-and-report only: no editing, no shell, no game control, and no
-    // question tool (subagent questions have no UI and would hang the turn).
-    tools: {
-      write: false,
-      edit: false,
-      patch: false,
-      bash: false,
-      task: false,
-      question: false,
-      todowrite: false,
-      todoread: false,
-      webfetch: false,
-      websearch: false,
-      'genieengine*': false
-    }
+  // Leftovers of the retired image slot (versions ≤ 0.1.2). The image-reader
+  // agent only existed to look at images for a chat model that couldn't; the
+  // `image` provider entry only served it. Both would keep working but would
+  // point users at a model they no longer configure — and a stale agent
+  // `model` on a missing provider fails the pre-flight provider check.
+  delete agents[LEGACY_IMAGE_READER_AGENT]
+  const providers = providerEntries(config)
+  delete providers[LEGACY_IMAGE_PROVIDER]
+  // Chat models on custom endpoints saved by those versions were declared
+  // text-only (only the image slot declared image input). Upgrade them in
+  // place so an existing install starts seeing images on the next launch
+  // rather than after the user happens to re-save the settings panel.
+  for (const id of [MEDIUM_PROVIDER, LARGE_PROVIDER]) {
+    for (const declaration of Object.values(providers[id]?.models ?? {})) Object.assign(declaration, IMAGE_CAPABLE_MODEL)
   }
+  if (Object.keys(providers).length) config.provider = providers
+  else delete config.provider
 
   agents[GAME_TESTER_AGENT] = {
     description:
@@ -252,7 +232,6 @@ export function applyAgentConfig(config: Record<string, unknown>, imageModelRef:
       'visual changes instead of testing yourself; tell it what changed and what to verify, ' +
       'and it reports what works and what is broken.',
     mode: 'subagent',
-    model: imageModelRef,
     prompt:
       'You are the game-testing specialist inside GenieEngine, an AI game engine for Godot 4 ' +
       'games. You verify that the current project actually works by playing it with the ' +
@@ -336,7 +315,6 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 
   const medium = slotStatus(chatModelRef('medium', config))
   const large = slotStatus(chatModelRef('large', config))
-  const image = slotStatus(configuredImageModel(config))
 
   return {
     // The chat dropdown can route any message to either chat model, so the
@@ -344,7 +322,6 @@ export async function getSetupStatus(): Promise<SetupStatus> {
     configured: medium.configured && large.configured,
     medium,
     large,
-    image,
     hy3dConfigured: await isHy3dConfigured(),
     gptImageConfigured: await isGptImageConfigured()
   }
@@ -352,7 +329,7 @@ export async function getSetupStatus(): Promise<SetupStatus> {
 
 /** One model slot's settings resolved against defaults and stored state. */
 interface ResolvedSlot {
-  id: 'medium' | 'large' | 'image'
+  id: ChatModelTier
   title: string
   endpoint: string
   model: string
@@ -397,11 +374,9 @@ export async function saveSetup(request: SetupRequest): Promise<void> {
       title,
       endpoint,
       model: req.model.trim() || defaultModel,
-      // Chat slots on OpenRouter use the built-in provider (models.dev
-      // metadata); anywhere else they get their own stable id. The image
-      // slot's id is ALWAYS its own — see the module comment for why.
-      providerId:
-        id === 'image' ? IMAGE_PROVIDER : isOpenRouterEndpoint(endpoint) ? OPENROUTER_PROVIDER : id,
+      // Slots on OpenRouter use the built-in provider (models.dev metadata);
+      // anywhere else they get their own stable id (see the module comment).
+      providerId: isOpenRouterEndpoint(endpoint) ? OPENROUTER_PROVIDER : id,
       prevProviderId: previous.provider,
       prevModel: previous.model,
       typedKey: req.apiKey.trim(),
@@ -413,22 +388,21 @@ export async function saveSetup(request: SetupRequest): Promise<void> {
   // provider wins) and key sharing (earlier slots donate to later ones).
   const slots = [
     resolve('medium', 'Medium model endpoint', request.medium, DEFAULT_MEDIUM_MODEL, chatModelRef('medium', config)),
-    resolve('large', 'Large model endpoint', request.large, DEFAULT_LARGE_MODEL, chatModelRef('large', config)),
-    resolve('image', 'Image model endpoint', request.image, DEFAULT_IMAGE_MODEL, configuredImageModel(config))
+    resolve('large', 'Large model endpoint', request.large, DEFAULT_LARGE_MODEL, chatModelRef('large', config))
   ]
-  const [medium, large, image] = slots
+  const [medium, large] = slots
 
   // 1. Credentials → auth.json. Each slot resolves to its OWN entry so no
-  //    save can clobber another slot's key (the old shared-slot scheme let a
-  //    chat-key update wipe the image credential):
+  //    save can clobber another slot's key (the old shared-slot scheme let
+  //    one slot's key update wipe another's credential):
   //     a. a key typed this save wins (first writer for a shared chat id);
   //     b. else an entry already stored under the slot's id is kept as-is;
   //     c. else the entry under the slot's PREVIOUS id is copied over — the
   //        credential follows the slot when its provider id changes but its
-  //        endpoint doesn't (upgrade from the legacy `custom` id, image
-  //        moving off `openrouter`), instead of being stranded under the old
-  //        id. Not on an endpoint change: the old key belongs to the old
-  //        service, so the slot must get a fresh key (typed or shared);
+  //        endpoint doesn't (upgrade from the legacy `custom` id), instead of
+  //        being stranded under the old id. Not on an endpoint change: the
+  //        old key belongs to the old service, so the slot must get a fresh
+  //        key (typed or shared);
   //     d. else a same-endpoint slot's entry is copied — the "leave blank to
   //        use the Medium key" flow, as a copy rather than an alias.
   const auth = await readJson(authPath())
@@ -484,11 +458,11 @@ export async function saveSetup(request: SetupRequest): Promise<void> {
   const providers = providerEntries(config)
   // Rebuild our provider entries from scratch so stale ones can't shadow
   // anything or confuse a later status read (built-in OpenRouter needs none;
-  // `custom` is the pre-Medium/Large id and only ever needs cleaning up).
+  // `custom` is the pre-Medium/Large id and only ever needs cleaning up; the
+  // legacy `image` id goes in applyAgentConfig below).
   delete providers[LEGACY_CUSTOM_PROVIDER]
   delete providers[MEDIUM_PROVIDER]
   delete providers[LARGE_PROVIDER]
-  delete providers[IMAGE_PROVIDER]
   for (const slot of slots) {
     if (slot.providerId === OPENROUTER_PROVIDER) continue
     const options = wireOptions(slot.thinking, slot.effort, 'openai-compatible')
@@ -497,15 +471,11 @@ export async function saveSetup(request: SetupRequest): Promise<void> {
       name: slot.title,
       options: { baseURL: slot.endpoint },
       // Models on openai-compatible entries aren't in models.dev, so they
-      // must be declared. The image model additionally declares image input —
-      // without it OpenCode assumes an unknown model can't see and strips
-      // image parts before they ever reach the subagents.
+      // must be declared — as image-capable (see IMAGE_CAPABLE_MODEL).
       models: {
         [slot.model]: {
           name: slot.model,
-          ...(slot.id === 'image'
-            ? { attachment: true, modalities: { input: ['text', 'image'], output: ['text'] } }
-            : {}),
+          ...IMAGE_CAPABLE_MODEL,
           ...(options ? { options } : {})
         }
       }
@@ -548,10 +518,8 @@ export async function saveSetup(request: SetupRequest): Promise<void> {
     declaration.options = { ...(declaration.options as Record<string, unknown> | undefined), ...options }
   }
 
-  if (Object.keys(providers).length) config.provider = providers
-  else delete config.provider
-
-  applyAgentConfig(config, `${image.providerId}/${image.model}`)
+  config.provider = providers
+  applyAgentConfig(config)
 
   if (!config.$schema) config.$schema = 'https://opencode.ai/config.json'
   await writeFile(configFile, JSON.stringify(config, null, 2))
