@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
- * Downloads the engines GenieEngine ships with — Godot and the OpenCode CLI —
- * into vendor/ for a target platform. Defaults to the *current* platform and
+ * Downloads the engines GenieEngine ships with — Godot and the Codex app-server
+ * — into vendor/ for a target platform. Defaults to the *current* platform and
  * runs automatically on `npm install` (postinstall); idempotent. electron-builder
  * copies vendor/<platform> into that platform's packaged app resources, so
  * installed builds are fully self-contained.
@@ -39,8 +39,11 @@ import { fileURLToPath } from 'node:url'
 const ROOT = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const VENDOR = join(ROOT, 'vendor')
 
-const GODOT_VERSION = '4.7.1'
-const OPENCODE_VERSION = 'v1.18.30'
+// The app reads the bundled engine's version from the binary itself (export
+// templates must match it — see templatesSource in export.ts), so this pin is
+// the only place to bump Godot.
+const GODOT_VERSION = '4.7.2'
+const CODEX_VERSION = '0.164.0'
 
 function argValue(flag) {
   const arg = process.argv.find((a) => a.startsWith(`--${flag}=`))
@@ -118,15 +121,28 @@ function koffiTarget() {
   }
 }
 
-function opencodeTarget() {
-  const os = platform === 'win32' ? 'windows' : platform === 'darwin' ? 'darwin' : 'linux'
-  const ext = os === 'linux' ? 'tar.gz' : 'zip'
-  const bin = os === 'windows' ? 'opencode.exe' : 'opencode'
+/**
+ * Codex's app-server package — the official distribution for embedding Codex
+ * in another app (IDE extensions use the same one). The archive extracts to
+ * the canonical package layout, kept intact because the binary resolves its
+ * helpers relative to itself: bin/codex-app-server (+ codex-code-mode-host),
+ * codex-path/rg (ripgrep, which Codex puts on the agent's PATH) and
+ * codex-resources/ (bwrap on Linux, sandbox helpers on Windows).
+ */
+function codexTarget() {
+  const cpu = arch === 'arm64' ? 'aarch64' : 'x86_64'
+  const triple =
+    platform === 'darwin'
+      ? `${cpu}-apple-darwin`
+      : platform === 'win32'
+        ? `${cpu}-pc-windows-msvc`
+        : `${cpu}-unknown-linux-musl`
+  const dir = join(VENDOR, 'codex', platform)
   return {
-    url: `https://github.com/sst/opencode/releases/download/${OPENCODE_VERSION}/opencode-${os}-${arch}.${ext}`,
-    version: OPENCODE_VERSION,
-    dir: join(VENDOR, 'opencode', platform),
-    check: join(VENDOR, 'opencode', platform, bin)
+    url: `https://github.com/openai/codex/releases/download/rust-v${CODEX_VERSION}/codex-app-server-package-${triple}.tar.gz`,
+    version: CODEX_VERSION,
+    dir,
+    check: join(dir, 'bin', platform === 'win32' ? 'codex-app-server.exe' : 'codex-app-server')
   }
 }
 
@@ -217,7 +233,11 @@ async function fetchTarget(label, target) {
 
 try {
   await fetchTarget(`Godot ${GODOT_VERSION}`, godotTarget())
-  await fetchTarget(`OpenCode ${OPENCODE_VERSION}`, opencodeTarget())
+  await fetchTarget(`Codex ${CODEX_VERSION}`, codexTarget())
+  // The assistant used to run on the OpenCode CLI (≤ 0.1.2). Nothing reads
+  // or packages vendor/opencode any more, so don't leave its binaries
+  // behind in existing checkouts.
+  rmSync(join(VENDOR, 'opencode'), { recursive: true, force: true })
   // Only the win32 target needs a staged koffi binary — on the host platform
   // npm installs the right one into node_modules, and only Windows uses FFI.
   if (platform === 'win32') await fetchTarget('koffi win32 prebuild', koffiTarget())

@@ -1,14 +1,14 @@
 #!/usr/bin/env node
 /**
  * MCP (Model Context Protocol) stdio server that exposes GenieEngine's game
- * testing tools to OpenCode. It is a thin bridge: every tool call is
+ * testing tools to the Codex agent. It is a thin bridge: every tool call is
  * forwarded over HTTP to the running GenieEngine app. The app is discovered
- * via GENIEENGINE_HARNESS_PORT/TOKEN env vars (set by the app on the OpenCode
- * server it spawns, inherited by this process — always the right instance),
- * falling back to harness.json in GenieEngine's userData directory for
- * OpenCode sessions that weren't launched by the app.
+ * via GENIEENGINE_HARNESS_PORT/TOKEN env vars (set by the app on the Codex
+ * server it spawns and passed through to this process — always the right
+ * instance), falling back to harness.json in GenieEngine's userData directory
+ * for agent sessions that weren't launched by the app.
  *
- * Spawned by OpenCode (registered in the global opencode config by the app)
+ * Spawned by Codex (registered per spawn by the app, see codex-config.ts)
  * with Electron's binary in Node mode — no separate Node install needed.
  * Zero dependencies; speaks newline-delimited JSON-RPC 2.0 on stdio.
  */
@@ -30,7 +30,7 @@ function userDataDir() {
 }
 
 function readHarness() {
-  // Env vars come from the GenieEngine instance that spawned this OpenCode
+  // Env vars come from the GenieEngine instance that spawned this Codex
   // server, so they can't point at the wrong instance and don't suffer the
   // shared-file races harness.json has when several instances run at once
   // (e.g. dev + packaged: one quitting used to delete the other's file).

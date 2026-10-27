@@ -10,7 +10,7 @@ type Tab = 'chat' | 'files' | 'git'
 interface Props {
   project: ProjectInfo
   width: number
-  opencodeAvailable: boolean
+  assistantAvailable: boolean
   advancedMode: boolean
 }
 
@@ -24,7 +24,7 @@ const TABS: { id: Tab; label: string; icon: React.JSX.Element }[] = [
  * The right-hand workspace sidebar. All three panels stay mounted (hidden via
  * CSS) so chat history, expanded folders and git state survive tab switches.
  */
-export function Workspace({ project, width, opencodeAvailable, advancedMode }: Props): React.JSX.Element {
+export function Workspace({ project, width, assistantAvailable, advancedMode }: Props): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('chat')
   // Bumped when the AI finishes work or the window refocuses, so the files
   // and git panels refresh to reflect changes made outside the UI.
@@ -59,7 +59,7 @@ export function Workspace({ project, width, opencodeAvailable, advancedMode }: P
       )}
       <div className="workspace-body">
         <div className="panel" style={{ display: !advancedMode || tab === 'chat' ? 'flex' : 'none' }}>
-          <ChatPanel projectPath={project.path} opencodeAvailable={opencodeAvailable} onAssistantDone={bump} />
+          <ChatPanel projectPath={project.path} assistantAvailable={assistantAvailable} onAssistantDone={bump} />
         </div>
         <div className="panel" style={{ display: advancedMode && tab === 'files' ? 'flex' : 'none' }}>
           <FilesPanel project={project} refreshToken={workVersion} />

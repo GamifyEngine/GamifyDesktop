@@ -39,7 +39,8 @@ async function resolveSystemGit(): Promise<string | null> {
   return systemGit
 }
 
-async function git(cwd: string, args: string[]): Promise<GitOutput> {
+/** Run git (system install preferred, bundled fallback); throws with git's own error text. */
+export async function git(cwd: string, args: string[]): Promise<GitOutput> {
   const sysGit = await resolveSystemGit()
   if (sysGit) {
     try {

@@ -5,8 +5,8 @@ import { join, normalize, resolve, sep } from 'node:path'
 /**
  * Shared pieces of the asset-generation services (hy3d.ts, gptimage.ts):
  * where generated assets land inside a project, and how provider credentials
- * are stored. Each provider keeps a small JSON file in userData, chmod 600 —
- * the same treatment OpenCode's auth.json gets.
+ * are stored. Each credential (asset providers, and the chat model slots in
+ * chat-setup.ts) is a small JSON file in userData, chmod 600.
  */
 
 export const slug = (value: string): string =>
@@ -44,8 +44,20 @@ export const IMAGE_MIME: Record<string, string> = {
   gif: 'image/gif'
 }
 
+/**
+ * Every credentials file created through credentialsStore. The AI agent's
+ * sandbox denies reading all of them (see chat-sandbox.ts), so a new provider
+ * is protected automatically instead of relying on a hand-kept list.
+ */
+const credentialFiles = new Set<string>()
+
+export function credentialFilePaths(): string[] {
+  return [...credentialFiles].map((name) => join(app.getPath('userData'), name))
+}
+
 /** Owner-only JSON credentials file in userData for one provider. */
 export function credentialsStore<T extends Record<string, string>>(fileName: string) {
+  credentialFiles.add(fileName)
   const path = (): string => join(app.getPath('userData'), fileName)
 
   return {

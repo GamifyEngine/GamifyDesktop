@@ -38,7 +38,8 @@ const api: GenieEngineApi = {
   onGameTestShot: (cb) => subscribe('game:test-shot', cb),
   onGameFps: (cb) => subscribe('game:fps', cb),
 
-  chatSend: (message, attachments, tier) => invoke('chat:send', message, attachments, tier),
+  chatSend: (message, attachments, tier, clientMessageId) =>
+    invoke('chat:send', message, attachments, tier, clientMessageId),
   // File objects lost their .path in modern Electron — this is the sanctioned
   // way for the renderer to learn where a dropped/picked file lives on disk
   // (asset uploads travel by path, not by value; see ChatAttachment).

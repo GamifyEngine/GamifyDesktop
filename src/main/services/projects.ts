@@ -94,7 +94,7 @@ function agentsBodyHash(content: string): string {
  * Upgrade a scaffolded AGENTS.md to the current template when the project is
  * opened. Early GenieEngine versions froze the full build rules into each
  * project's AGENTS.md; those rules now ship with the app and are injected per
- * chat-server spawn (see agentInstructionsPath in opencode-config.ts), so a
+ * chat server (see agentInstructions in codex-config.ts), so a
  * stale copy would sit in the system prompt alongside — and contradict — the
  * injected ones. Only files whose body hash-matches a template the app wrote
  * are replaced; the title line is exempt from the match so a rename doesn't

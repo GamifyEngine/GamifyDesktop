@@ -16,8 +16,8 @@ export interface InitialState {
   recentProjects: ProjectInfo[]
   /** Resolved path of the Godot binary, or null when it could not be found. */
   godotPath: string | null
-  /** Resolved path of the OpenCode CLI, or null when it could not be found. */
-  opencodePath: string | null
+  /** Resolved path of the Codex app-server behind the AI chat, or null when it could not be found. */
+  codexPath: string | null
   /** Whether the ECS viewer, files/git sidebars and console output are shown. */
   advancedMode: boolean
   /** Whether the window is currently in native (macOS green-button) fullscreen. */
@@ -104,7 +104,7 @@ export interface ChatQuestionOption {
   description: string
 }
 
-/** One question from the assistant's "question" tool (mirrors OpenCode's schema). */
+/** One question from the assistant's question tool (Codex's request_user_input). */
 export interface ChatQuestion {
   question: string
   /** Short chip/tag label, e.g. "Art style". */
@@ -135,22 +135,23 @@ export interface ChatQuestionRequest {
 export type ChatModelTier = 'medium' | 'large'
 
 /**
- * Whether the model should think before answering. Sent to the model as the
- * standard OpenAI-format `thinking: {"type": "enabled"|"disabled"}` request
- * field (see https://api-docs.deepseek.com/guides/thinking_mode/);
- * 'default' sends nothing and leaves the model on its own default.
+ * Whether the model should think before answering: sent as OpenRouter's
+ * `reasoning.enabled`, or elsewhere as the DeepSeek-style
+ * `thinking: {"type": "enabled"|"disabled"}` request field (see
+ * https://api-docs.deepseek.com/guides/thinking_mode/); 'default' sends
+ * nothing and leaves the model on its own default. See model-proxy.ts.
  */
 export type ThinkingMode = 'default' | 'enabled' | 'disabled'
 
 /**
- * How hard the model should think, sent as the standard OpenAI-format
- * `reasoning_effort` request field; 'default' sends nothing.
+ * How hard the model should think, sent as the Responses API's
+ * `reasoning.effort` request field; 'default' sends nothing.
  */
 export type ReasoningEffort = 'default' | 'low' | 'medium' | 'high' | 'xhigh' | 'max'
 
 /** One model slot's stored connection settings, as shown in the setup panel. */
 export interface ModelSlotStatus {
-  /** Base URL of the OpenAI-compatible API this model is served from. */
+  /** Base URL of the OpenAI Responses-API endpoint this model is served from. */
   endpoint: string
   model: string
   /** True once this model's endpoint has a usable credential. */
@@ -387,9 +388,18 @@ export interface GenieEngineApi {
   /** Measured game frame rate, ~1 update/second while a game runs. */
   onGameFps(cb: (fps: number) => void): () => void
 
-  // AI chat (OpenCode)
-  /** `tier` picks which chat model answers; the conversation continues either way. */
-  chatSend(message: string, attachments?: ChatAttachment[], tier?: ChatModelTier): Promise<Result<null>>
+  // AI chat (Codex)
+  /**
+   * `tier` picks which chat model answers; the conversation continues either
+   * way. `clientMessageId` is the renderer's id for the user's message — what
+   * /undo later reports back as `revertedTo`.
+   */
+  chatSend(
+    message: string,
+    attachments?: ChatAttachment[],
+    tier?: ChatModelTier,
+    clientMessageId?: string
+  ): Promise<Result<null>>
   /**
    * Absolute disk path of a picked/dropped File (Electron webUtils) — '' when
    * it has none (e.g. a File synthesized in the page). Synchronous.
@@ -397,9 +407,9 @@ export interface GenieEngineApi {
   pathForFile(file: File): string
   chatCancel(): Promise<Result<null>>
   /**
-   * /undo: revert the conversation one user turn (OpenCode restores the files
-   * that turn touched). `revertedTo` is the OpenCode id of the undone user
-   * message — the renderer drops its transcript from the matching turn on.
+   * /undo: revert the conversation one user turn and restore the files that
+   * turn touched. `revertedTo` is the `clientMessageId` of the undone user
+   * message — the renderer drops its transcript from that message on.
    */
   chatUndo(): Promise<Result<{ revertedTo: string }>>
   /** /redo: step the revert point forward again (files and conversation). */

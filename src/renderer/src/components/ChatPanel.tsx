@@ -122,7 +122,7 @@ function stripEphemeral(messages: ChatMessage[]): ChatMessage[] {
 
 /**
  * Heuristic for "the AI provider couldn't be reached": the error strings
- * Node/undici/OpenCode produce for DNS, socket and timeout failures. Used to
+ * Node and the app's model proxy produce for DNS, socket and timeout failures. Used to
  * tell a dropped connection apart from a real model/tooling error, so the
  * chat can offer to continue the interrupted turn instead of just showing a
  * raw failure. (navigator.onLine alone isn't enough — a router that's up but
@@ -147,7 +147,7 @@ function readFileAsDataUrl(file: File): Promise<string> {
 
 interface Props {
   projectPath: string
-  opencodeAvailable: boolean
+  assistantAvailable: boolean
   onAssistantDone: () => void
 }
 
@@ -195,9 +195,8 @@ function slashQueryOf(input: string): string | null {
 function toolIcon(name: string): React.JSX.Element {
   const base = name.replace(/^genieengine_/, '')
   if (base === 'bash') return <TerminalIcon size={11} />
-  if (base === 'glob' || base === 'grep' || base === 'list' || base === 'webfetch' || base === 'itch_search')
-    return <SearchIcon size={11} />
-  if (base === 'read' || base === 'write' || base === 'edit' || base === 'patch') return <FileIcon size={11} />
+  if (base === 'grep' || base === 'list' || base === 'websearch' || base === 'itch_search') return <SearchIcon size={11} />
+  if (base === 'read' || base === 'write' || base === 'edit' || base === 'view_image') return <FileIcon size={11} />
   if (base === 'itch_download') return <FolderIcon size={11} />
   return <SparkIcon size={11} />
 }
@@ -452,7 +451,7 @@ function QuestionCard({
   )
 }
 
-export function ChatPanel({ projectPath, opencodeAvailable, onAssistantDone }: Props): React.JSX.Element {
+export function ChatPanel({ projectPath, assistantAvailable, onAssistantDone }: Props): React.JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -514,7 +513,8 @@ export function ChatPanel({ projectPath, opencodeAvailable, onAssistantDone }: P
   // state is the only copy — the saved transcript is overwritten on undo — so
   // redo reaches exactly as far back as the undos of this app run. Cleared
   // whenever the conversation moves on (send, /clear, project switch), which
-  // mirrors OpenCode dropping its revert point on the next message.
+  // mirrors the main process making a pending undo permanent on the next
+  // message.
   const redoStackRef = useRef<ChatMessage[][]>([])
 
   // Restore this project's transcript and recall history when it opens (the
@@ -774,14 +774,14 @@ export function ChatPanel({ projectPath, opencodeAvailable, onAssistantDone }: P
     setAttachments([])
     setAttachError(null)
     // Moving the conversation forward makes any pending undo permanent
-    // (OpenCode trims the reverted messages on the next prompt).
+    // (the undone turns are dropped from the conversation on the next send).
     redoStackRef.current = []
-    setMessages((msgs) => [
-      ...msgs,
-      { id: crypto.randomUUID(), role: 'user', content: message, attachments: outgoing }
-    ])
+    // The bubble's id travels with the message, so /undo can name exactly
+    // which message it took back.
+    const id = crypto.randomUUID()
+    setMessages((msgs) => [...msgs, { id, role: 'user', content: message, attachments: outgoing }])
     setStreaming(true)
-    const result = await window.api.chatSend(message, outgoing, modelTier)
+    const result = await window.api.chatSend(message, outgoing, modelTier, id)
     if (!result.ok) {
       setStreaming(false)
       setMessages((msgs) => [...msgs, { id: crypto.randomUUID(), role: 'error', content: result.error }])
@@ -825,27 +825,22 @@ export function ChatPanel({ projectPath, opencodeAvailable, onAssistantDone }: P
       draftRef.current = ''
     }
     if (command.name === 'undo') {
-      // The main process aborts a still-streaming turn first (native /undo
-      // behavior), reverts the OpenCode session one user turn, and restores
-      // the project files that turn changed.
+      // The main process aborts a still-streaming turn first, rewinds the
+      // conversation one user turn, and restores the project files that turn
+      // changed.
       const result = await window.api.chatUndo()
       if (!result.ok) {
         appendNotice(result.error)
         return
       }
-      // Drop the undone turn from the transcript. Assistant message ids are
-      // OpenCode message ids (time-ordered strings, unlike the local uuids on
-      // user bubbles), so the first assistant message newer than the
-      // reverted-to id marks the undone turn; the user bubble before it opens
-      // that turn. No such assistant message (the turn died before producing
-      // one, or a trailing send never reached the session) → the last user
-      // bubble is the one being undone. Slicing to the turn's start also
-      // sweeps the turn's error/"Stopped." notices.
+      // Drop the undone turn from the transcript: `revertedTo` is the id this
+      // panel gave that user message when sending it. Not on screen (a chat
+      // restored from an older version, where ids weren't passed along) →
+      // the last user bubble is the one being undone. Slicing from the
+      // turn's start also sweeps the turn's error/"Stopped." notices.
       const current = messagesRef.current
-      let cut = current.findIndex((m) => m.role === 'assistant' && m.id > result.data.revertedTo)
-      if (cut === -1) cut = current.length
-      let start = cut - 1
-      while (start >= 0 && current[start].role !== 'user') start--
+      let start = current.findIndex((m) => m.role === 'user' && m.id === result.data.revertedTo)
+      if (start === -1) start = current.map((m) => m.role).lastIndexOf('user')
       if (start < 0) return // no matching turn on screen — leave the transcript alone
       const removed = current.slice(start)
       redoStackRef.current.push(removed)
@@ -921,9 +916,9 @@ export function ChatPanel({ projectPath, opencodeAvailable, onAssistantDone }: P
       <div className="chat-messages" ref={listRef}>
         {messages.length === 0 && (
           <div className="chat-empty">
-            {!opencodeAvailable && (
+            {!assistantAvailable && (
               <div className="notice">
-                The bundled OpenCode assistant is missing. Reinstall GenieEngine, or run{' '}
+                The bundled Codex assistant is missing. Reinstall GenieEngine, or run{' '}
                 <code>npm run setup</code> in development.
               </div>
             )}

@@ -118,13 +118,13 @@ exports/
 }
 
 /**
- * AGENTS.md is picked up automatically by OpenCode (and other coding agents),
+ * AGENTS.md is picked up automatically by Codex (and other coding agents),
  * but it is a snapshot frozen into each project at creation time — so it
  * stays THIN and project-owned. The app's actual build rules (scope, ECS
  * architecture, asset layout, file headers, testing) live in
- * resources/agent-instructions.md and are injected into every app-spawned
- * chat server via the `instructions` config (see opencode-config.ts), which
- * keeps them versioned with the app instead of going stale per project.
+ * resources/agent-instructions.md and reach the agent as Codex developer
+ * instructions (see codex-config.ts), which keeps them versioned with the
+ * app instead of going stale per project.
  *
  * If you change this template's output, add the outgoing version's body hash
  * to APP_OWNED_AGENTS_BODY_HASHES in projects.ts — that list is how existing

@@ -24,7 +24,7 @@ export function App(): React.JSX.Element {
   const [project, setProject] = useState<ProjectInfo | null>(null)
   const [recents, setRecents] = useState<ProjectInfo[]>([])
   const [godotPath, setGodotPath] = useState<string | null>(null)
-  const [opencodePath, setOpencodePath] = useState<string | null>(null)
+  const [codexPath, setCodexPath] = useState<string | null>(null)
 
   const [gameState, setGameState] = useState<GameState>({ status: 'stopped' })
   const [gameError, setGameError] = useState<string | null>(null)
@@ -61,8 +61,8 @@ export function App(): React.JSX.Element {
 
   // AI provider setup: fetched app-wide (not project-scoped) so the settings
   // gear works from both the title bar and the welcome screen. Re-checked on
-  // window focus so running `opencode auth login` externally, or connecting
-  // elsewhere, clears the overlay without a restart.
+  // window focus so a setup completed elsewhere (another GenieEngine window
+  // or instance) clears the overlay without a restart.
   const [setup, setSetup] = useState<SetupStatus | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
   useEffect(() => {
@@ -75,10 +75,10 @@ export function App(): React.JSX.Element {
     window.addEventListener('focus', check)
     return () => window.removeEventListener('focus', check)
   }, [])
-  const opencodeAvailable = opencodePath !== null
+  const assistantAvailable = codexPath !== null
   // Gates chat until an API key is connected — only forced once a project is
   // open, since that's the earliest point the assistant is actually used.
-  const needsSetup = project !== null && opencodeAvailable && setup !== null && !setup.configured
+  const needsSetup = project !== null && assistantAvailable && setup !== null && !setup.configured
 
   // The embedded game renders as a native layer the OS composites above the
   // web contents — DOM can't cover it, so hide it while the ECS tab is open
@@ -100,7 +100,7 @@ export function App(): React.JSX.Element {
         setProject(state.project)
         setRecents(state.recentProjects)
         setGodotPath(state.godotPath)
-        setOpencodePath(state.opencodePath)
+        setCodexPath(state.codexPath)
         setAdvancedModeState(state.advancedMode)
         setIsFullScreen(state.isFullScreen)
       }
@@ -242,7 +242,7 @@ export function App(): React.JSX.Element {
             key={project.path}
             project={project}
             width={sidebarWidth}
-            opencodeAvailable={opencodeAvailable}
+            assistantAvailable={assistantAvailable}
             advancedMode={advancedMode}
           />
         </div>

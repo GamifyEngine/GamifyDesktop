@@ -24,7 +24,7 @@ import type { AssetPreview } from '../../shared/types'
 
 /**
  * Local HTTP API that exposes the AI game-testing tools to the MCP bridge
- * (resources/mcp-bridge.mjs), which OpenCode spawns as a local MCP server.
+ * (resources/mcp-bridge.mjs), which Codex spawns as a local MCP server.
  * The bridge finds us two ways (see getHarnessEndpoint / harness.json below),
  * so nothing machine-specific is written into any project or global config.
  * Bound to 127.0.0.1 and guarded by a per-launch random token.
@@ -34,12 +34,12 @@ let server: Server | null = null
 let endpoint: { port: number; token: string } | null = null
 
 /**
- * This instance's harness address. Injected into the env of every OpenCode
+ * This instance's harness address. Injected into the env of every Codex
  * server we spawn so the bridge always reaches THIS app instance. harness.json
  * can't provide that guarantee: it's one file shared by every GenieEngine
  * instance (dev + packaged can run side by side), so it holds whichever
- * instance registered last — the file is only a fallback for OpenCode
- * sessions that weren't launched by the app (e.g. the opencode CLI).
+ * instance registered last — the file is only a fallback for agent sessions
+ * that weren't launched by the app.
  */
 export function getHarnessEndpoint(): { port: number; token: string } | null {
   return endpoint
@@ -56,8 +56,8 @@ const KEEP_SHOTS = 12
  * Screenshots live INSIDE the project (.genieengine/test-shots/, gitignored and
  * .gdignore'd via ensureProjectStateDir). They used to go to the app's
  * userData dir, and handing that ~/Library path to the model lured it into
- * reading/copying outside the project — which the permission policy rejects
- * (see opencode.ts) and killed agent runs. In-project, every agent (main,
+ * reading/copying outside the project — which the sandbox rejects (see
+ * chat-sandbox.ts) and derailed agent runs. In-project, every agent (main,
  * game-tester) can read a shot by its relative path freely.
  */
 async function pruneShots(dir: string): Promise<void> {
@@ -205,7 +205,7 @@ async function dispatchTool(name: string, args: Record<string, unknown>): Promis
         generateType: args.generate_type as GenerateAssetRequest['generateType'],
         enablePBR: typeof args.enable_pbr === 'boolean' ? args.enable_pbr : undefined
       })
-      // Written outside OpenCode's own file tracking — nudge the sidebar panels.
+      // Written outside the agent's own file edits — nudge the sidebar panels.
       sendToRenderer('chat:files-changed')
       // Show the turntable (or still) in the chat so the user can react to it.
       const chatPreview = result.turntableBase64 ?? result.previewBase64
@@ -324,7 +324,7 @@ export function startTestHarness(): void {
     const address = server?.address()
     const port = typeof address === 'object' && address ? address.port : 0
     endpoint = { port, token }
-    // Fallback discovery for OpenCode sessions not spawned by the app.
+    // Fallback discovery for agent sessions not spawned by the app.
     // Owner-only like the credential files: the token authorizes tool calls
     // (GDScript eval, input injection) on a loopback server every local user
     // can reach. `mode` only applies on creation, so chmod also fixes up a

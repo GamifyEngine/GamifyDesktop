@@ -31,13 +31,13 @@ type SlotId = ChatModelTier
 
 /**
  * The two model sections on the Models tab, in display (and key-sharing donor)
- * order. Placeholders mirror the main-process defaults (opencode-setup.ts).
+ * order. Placeholders mirror the main-process defaults (chat-setup.ts).
  */
 const MODEL_SLOTS: { id: SlotId; title: string; hint: string; modelPlaceholder: string }[] = [
   {
     id: 'medium',
     title: 'Chat model — Medium',
-    hint: 'The everyday model that plans and writes your game’s code, reads the images you attach, and play-tests your game with screenshots — so it must accept image input. Any OpenAI-compatible API endpoint will work.',
+    hint: 'The everyday model that plans and writes your game’s code, reads the images you attach, and play-tests your game with screenshots — so it must accept image input. Any endpoint that speaks the OpenAI Responses API works — OpenRouter does.',
     modelPlaceholder: 'deepseek/deepseek-v4.1-flash'
   },
   {
@@ -162,7 +162,7 @@ function ModelSection(props: {
       <div className="setup-field-row">
         <label
           className="setup-field"
-          title="Whether the model thinks before answering — sent as the standard OpenAI `thinking` field. Default sends nothing."
+          title="Whether the model thinks before answering — sent as OpenRouter's `reasoning.enabled` (a DeepSeek-style `thinking` field on other endpoints). Default sends nothing."
         >
           <span className="setup-label">Thinking</span>
           <select
@@ -179,7 +179,7 @@ function ModelSection(props: {
         </label>
         <label
           className="setup-field"
-          title="How hard the model thinks — sent as the standard OpenAI `reasoning_effort` field. Default sends nothing; not every model accepts every level."
+          title="How hard the model thinks — sent as the Responses API's `reasoning.effort` field. Default sends nothing; not every model accepts every level."
         >
           <span className="setup-label">Reasoning effort</span>
           <select
@@ -222,8 +222,8 @@ function ModelSection(props: {
 /**
  * AI provider setup, shown over a darkened chat until the assistant is
  * connected (and reopenable later from the sidebar gear). Three tabs:
- * the models (any OpenAI-compatible endpoints — the image-capable Medium and
- * Large chat models), optional 2D asset generation (OpenAI gpt-image-1.5)
+ * the models (any OpenAI Responses-API endpoints — the image-capable Medium
+ * and Large chat models), optional 2D asset generation (OpenAI gpt-image-1.5)
  * and optional 3D asset generation (Tencent HY 3D).
  */
 export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JSX.Element {
@@ -333,9 +333,9 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
           <div>
             <h2 className="setup-title">{status.configured ? 'AI settings' : 'Connect your AI assistant'}</h2>
             <p className="setup-sub">
-              GenieEngine's assistant is powered by OpenCode: Medium and Large chat models you can
-              switch between per message. Both must accept image input — the assistant reads the
-              images you attach and play-tests your game with screenshots itself.
+              GenieEngine's assistant is powered by OpenAI's Codex agent, running on Medium and Large
+              chat models you can switch between per message. Both must accept image input — the
+              assistant reads the images you attach and play-tests your game with screenshots itself.
             </p>
           </div>
         </div>
@@ -376,7 +376,7 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
                 keyPlaceholder={keyPlaceholder(id)}
                 keyHint={
                   id === 'medium'
-                    ? 'Stored locally in OpenCode’s credential file — it never leaves your machine or enters your game’s code.'
+                    ? 'Stored locally by GenieEngine and only ever sent to this endpoint — never written into your game, and the assistant itself can’t read it.'
                     : undefined
                 }
                 keyHidden={status[id].configured && !slots[id].keyRevealed}

@@ -9,7 +9,7 @@ import { extractZip } from './export'
  * prompt or reference image. Used by the AI through the MCP harness tool
  * `generate_3d_asset` (test-harness.ts), gated on the user having saved
  * Tencent credentials in the setup panel — without them the tool is never
- * offered to OpenCode (see mcp-bridge.mjs).
+ * offered to the agent (see mcp-bridge.mjs).
  *
  * API: https://www.tencentcloud.com/document/product/1284/75287
  * Flow: SubmitHunyuanTo3DProJob → poll QueryHunyuanTo3DProJob until DONE/FAIL

@@ -1,21 +1,25 @@
 import { copyFile, cp, lstat, mkdir, readdir, readFile, rename, rm, stat, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type { ChatAttachment } from '../../shared/types'
+import { clearUndoHistory } from './snapshots'
 
 /**
  * Per-project chat persistence, stored inside the game project under
  * .genieengine/ (gitignored — chat transcripts are personal, never shared):
  *
- * - chat.json           the rendered transcript plus the OpenCode session id,
+ * - chat.json           the rendered transcript plus the conversation's id
+ *                       (its Codex thread; `sessionID` in the file),
  *                       restored when the project is reopened. /clear deletes
  *                       it, so a cleared chat stays cleared.
  * - input-history.json  every message the user has sent, for ↑/↓ recall in
  *                       the composer. Intentionally survives /clear.
- * - attachments/        files the user attached to messages: images saved so
- *                       the AI (and its game-tester subagent) can re-open them
- *                       by path in later turns, plus asset uploads
- *                       (zips/folders/models) copied here so the sandboxed
- *                       assistant can reach them at all.
+ * - attachments/        files the user attached to messages: images and
+ *                       documents saved so the AI (and its game-tester
+ *                       subagent) can re-open them by path in later turns,
+ *                       plus asset uploads (zips/folders/models) copied here
+ *                       so the sandboxed assistant can reach them at all.
+ * - undo/               per-turn project snapshots behind /undo (see
+ *                       snapshots.ts).
  * - test-shots/         screenshots the AI takes of the running game (written
  *                       by test-harness.ts) — in-project so agents can read
  *                       them without leaving the project directory.
@@ -27,8 +31,8 @@ import type { ChatAttachment } from '../../shared/types'
  * process treats it as opaque (`unknown[]`) and the renderer validates shape
  * on load, so a schema change can never crash the app, only skip restoring.
  * The one exception is loadTranscriptRecap, which best-effort extracts plain
- * text from the saved messages to re-seed a fresh OpenCode session with the
- * conversation the user can still see; every field access there is guarded,
+ * text from the saved messages to re-seed a fresh conversation with the
+ * one the user can still see; every field access there is guarded,
  * so a schema change degrades to "no recap", never a crash.
  */
 
@@ -139,8 +143,10 @@ export async function appendInputHistory(projectPath: string, entry: string): Pr
 export async function clearChatHistory(projectPath: string): Promise<void> {
   await rm(join(projectPath, STATE_DIR, CHAT_FILE), { force: true })
   // Attachments only exist for the conversation that referenced them — a
-  // cleared chat can't reach the old paths, so drop the files with it.
+  // cleared chat can't reach the old paths, so drop the files with it, and
+  // the same goes for the undo snapshots.
   await rm(join(projectPath, STATE_DIR, ATTACH_DIR), { recursive: true, force: true })
+  await clearUndoHistory(projectPath)
 }
 
 // Recap limits: enough for the model to pick the conversation back up, small
@@ -152,11 +158,12 @@ const RECAP_MAX_MESSAGE_CHARS = 1500
 const RECAP_MAX_TOTAL_CHARS = 18000
 
 /**
- * Plain-text recap of the saved transcript, for re-seeding a NEW OpenCode
- * session when the saved one is gone (deleted storage, stale id) or unusable
- * (context overflow). Without this, the chat window shows the restored
- * conversation while the model starts blank — continuations silently lose
- * all context. Returns null when there is nothing usable to recap.
+ * Plain-text recap of the saved transcript, for re-seeding a NEW
+ * conversation when the saved one is gone (deleted storage, stale id, a chat
+ * from the OpenCode-based versions) or unusable (context overflow). Without
+ * this, the chat window shows the restored conversation while the model
+ * starts blank — continuations silently lose all context. Returns null when
+ * there is nothing usable to recap.
  *
  * The saved messages are renderer-owned JSON (see header); extraction is
  * best-effort: user text lives in `content`, assistant text in
@@ -217,11 +224,11 @@ async function ensureAttachmentsDir(projectPath: string): Promise<string> {
 
 /**
  * Writes message attachments into .genieengine/attachments/ and returns their
- * project-relative paths (POSIX-style, ready for the message text). The image
- * also rides the message as a file part, but the path is what lets the model
- * look at it again in later turns (via the `read` tool) and what lets the
- * game-tester subagent see it: a subagent never sees the parent's message
- * parts — a path handed through the task tool is its only way in.
+ * project-relative paths (POSIX-style, ready for the message text). Images
+ * also ride the message itself, but the path is what lets the model look at
+ * one again in later turns (via view_image) and what lets the game-tester
+ * subagent see it: a subagent never sees the parent's message — a path
+ * handed over in its task is its only way in.
  */
 export async function saveChatAttachments(
   projectPath: string,
@@ -234,7 +241,7 @@ export async function saveChatAttachments(
   for (const [i, attachment] of attachments.entries()) {
     const comma = attachment.dataUrl?.indexOf(',') ?? -1
     if (!attachment.dataUrl || comma === -1) continue
-    const base = slugName(attachment.name.replace(/\.[^.]*$/, ''), 'image')
+    const base = slugName(attachment.name.replace(/\.[^.]*$/, ''), 'attachment')
     const ext =
       attachment.name.match(/\.([A-Za-z0-9]+)$/)?.[1] ??
       attachment.mime.split('/')[1]?.split('+')[0] ??

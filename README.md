@@ -8,7 +8,7 @@
 </p>
 
 **GenieEngine** is an AI-powered game engine that lets you build commercial-quality video game with AI. Games are real [Godot 4](https://godotengine.org) projects under the hood, and
-the AI assistant is powered by the [OpenCode](https://opencode.ai) CLI. Everything — the engine,
+the AI assistant is powered by OpenAI's [Codex](https://github.com/openai/codex) agent. Everything — the engine,
 git, and the AI agent — ships inside the app, so there's nothing to install or configure beyond
 an API key.
 
@@ -31,7 +31,7 @@ of Godot, which is a key technology that enables GenieEngine.
 
 ## Why GenieEngine (vs. a coding agent like Claude Code)
 
-Claude Code and OpenCode are excellent general-purpose coding agents — but they assume you already
+Claude Code and Codex are excellent general-purpose coding agents — but they assume you already
 have a dev environment, are comfortable in a terminal, can easily create art assets, and can wire
 up a game engine and an export process yourself. GenieEngine uses that same class of AI agent, but
 packages it for one job: making a game.
@@ -63,9 +63,10 @@ Install GenieEngine and open it. From the welcome screen, click **New Game**.
 On first launch, GenieEngine shows a **Connect your AI assistant** screen (reopen it any time via
 the gear icon in the title bar). It has three tabs:
 
-**Models** — required; the model slots that power the assistant. Each slot takes any
-OpenAI-compatible **API endpoint** (defaults to **OpenRouter**, `https://openrouter.ai/api/v1`), a
-**Model**, an **API key**, and **Thinking** / **Reasoning effort** settings. Grab a key from
+**Models** — required; the model slots that power the assistant. Each slot takes an **API
+endpoint** that speaks the OpenAI Responses API (defaults to **OpenRouter**,
+`https://openrouter.ai/api/v1`), a **Model**, an **API key**, and **Thinking** / **Reasoning
+effort** settings. Keys are stored locally by GenieEngine and never exposed to the assistant itself. Grab a key from
 [openrouter.ai/keys](https://openrouter.ai/keys) and paste it into the Medium slot — the Large slot
 reuses it if you leave its key blank. Both models must accept image input: the assistant reads the
 images you attach and play-tests your game with screenshots itself. Recommended setup:

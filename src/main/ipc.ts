@@ -1,6 +1,6 @@
 import { dialog, ipcMain } from 'electron'
 import type { ChatAttachment, ChatModelTier, GameInputEvent, GitChange, InitialState, ProjectInfo, Result, SetupRequest, StageRect } from '../shared/types'
-import { normalizeGodotPath, resolveGodot, resolveOpencode } from './services/binaries'
+import { normalizeGodotPath, resolveCodex, resolveGodot } from './services/binaries'
 import { scanEcs } from './services/ecs'
 import * as files from './services/files'
 import { handleGameInput, openGodotEditor, playGame, setGameLayerVisible, setStageRect, setTestMonitorRect, stopGame } from './services/game'
@@ -24,8 +24,8 @@ import {
   sendChatMessage,
   shutdownChat,
   undoChat
-} from './services/opencode'
-import { getSetupStatus, saveSetup } from './services/opencode-setup'
+} from './services/codex'
+import { getSetupStatus, saveSetup } from './services/chat-setup'
 import { cancelExport, revealExport, runExport } from './services/export'
 import type { ExportPlatform } from '../shared/types'
 import { createProject, openProject, projectInfoFor } from './services/projects'
@@ -72,7 +72,7 @@ export function registerIpcHandlers(): void {
       project: getCurrentProject(),
       recentProjects: recents,
       godotPath: await resolveGodot(),
-      opencodePath: await resolveOpencode(),
+      codexPath: await resolveCodex(),
       advancedMode: getAdvancedMode(),
       isFullScreen: getMainWindow()?.isFullScreen() ?? false
     }
@@ -137,11 +137,17 @@ export function registerIpcHandlers(): void {
 
   // ---- AI chat ---------------------------------------------------------------
   // The tier is renderer input — anything but 'large' falls back to 'medium'.
-  handle('chat:send', (message: string, attachments?: ChatAttachment[], tier?: ChatModelTier) =>
-    sendChatMessage(message, requireProject().path, attachments ?? [], tier === 'large' ? 'large' : 'medium')
+  handle('chat:send', (message: string, attachments?: ChatAttachment[], tier?: ChatModelTier, clientMessageId?: string) =>
+    sendChatMessage(
+      message,
+      requireProject().path,
+      attachments ?? [],
+      tier === 'large' ? 'large' : 'medium',
+      typeof clientMessageId === 'string' ? clientMessageId : undefined
+    )
   )
   handle('chat:cancel', () => cancelChat())
-  // /undo & /redo: OpenCode's native session revert (conversation AND files).
+  // /undo & /redo: rewinds the conversation AND restores the project files.
   handle('chat:undo', () => undoChat(requireProject().path))
   handle('chat:redo', () => redoChat(requireProject().path))
   // /clear: fresh conversation and the saved transcript is forgotten (the

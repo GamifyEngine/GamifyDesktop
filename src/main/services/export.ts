@@ -24,8 +24,35 @@ const pexec = promisify(execFile)
  * and iOS needs Xcode — those surface Godot's own error messages.
  */
 
-const GODOT_VERSION = '4.7.1'
-const TEMPLATES_URL = `https://github.com/godotengine/godot/releases/download/${GODOT_VERSION}-stable/Godot_v${GODOT_VERSION}-stable_export_templates.tpz`
+/** Where a Godot build's export templates live and come from. */
+interface TemplatesSource {
+  /** Godot's directory name for them, e.g. "4.7.2.stable" (".mono" suffix for .NET builds). */
+  dirName: string
+  url: string
+}
+
+/**
+ * Export templates must match the engine exactly, so they're derived from
+ * the binary that will run the export — the bundled engine, or the user's own
+ * Godot install if they pointed GenieEngine at one — instead of a pinned
+ * version that can drift from it. `--version` prints e.g.
+ * "4.7.2.stable.official.a13da4feb" ("4.8.beta1.…" for pre-releases,
+ * "….mono.…" for .NET builds).
+ */
+async function templatesSource(godot: string): Promise<TemplatesSource> {
+  const { stdout } = await pexec(godot, ['--headless', '--version'], { timeout: 60_000 })
+  const match = /^(\d+\.\d+(?:\.\d+)?)\.([a-z]+\d*)(\.mono)?\./m.exec(stdout)
+  if (!match) throw new Error(`Could not read the Godot version (got "${stdout.trim().slice(0, 80)}").`)
+  const [, number, status, mono] = match
+  const tag = `${number}-${status}`
+  const file = `Godot_v${tag}${mono ? '_mono' : ''}_export_templates.tpz`
+  // Stable releases are published on the main repo; pre-releases only on godot-builds.
+  const repo = status === 'stable' ? 'godotengine/godot' : 'godotengine/godot-builds'
+  return {
+    dirName: `${number}.${status}${mono ? '.mono' : ''}`,
+    url: `https://github.com/${repo}/releases/download/${tag}/${file}`
+  }
+}
 
 interface PlatformSpec {
   id: ExportPlatform
@@ -90,14 +117,14 @@ function progress(update: ExportProgress): void {
   sendToRenderer('export:progress', update)
 }
 
-function templatesDir(): string {
+function templatesDir(source: TemplatesSource): string {
   switch (process.platform) {
     case 'darwin':
-      return join(homedir(), 'Library', 'Application Support', 'Godot', 'export_templates', `${GODOT_VERSION}.stable`)
+      return join(homedir(), 'Library', 'Application Support', 'Godot', 'export_templates', source.dirName)
     case 'win32':
-      return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Godot', 'export_templates', `${GODOT_VERSION}.stable`)
+      return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'Godot', 'export_templates', source.dirName)
     default:
-      return join(homedir(), '.local', 'share', 'godot', 'export_templates', `${GODOT_VERSION}.stable`)
+      return join(homedir(), '.local', 'share', 'godot', 'export_templates', source.dirName)
   }
 }
 
@@ -128,13 +155,14 @@ export async function extractZip(archive: string, dest: string): Promise<void> {
 }
 
 /** Download + install the full template set (once per Godot version). */
-async function ensureTemplates(): Promise<void> {
-  const dir = templatesDir()
+async function ensureTemplates(godot: string): Promise<void> {
+  const source = await templatesSource(godot)
+  const dir = templatesDir(source)
   if (existsSync(dir) && (await readdir(dir)).length > 10) return
 
   progress({ phase: 'templates', message: 'Downloading Godot export templates (~1 GB, one-time)…', percent: 0 })
-  const archive = join(tmpdir(), `og-templates-${GODOT_VERSION}.tpz`)
-  const res = await fetch(TEMPLATES_URL, { redirect: 'follow' })
+  const archive = join(tmpdir(), `og-templates-${source.dirName}.tpz`)
+  const res = await fetch(source.url, { redirect: 'follow' })
   if (!res.ok || !res.body) throw new Error(`Template download failed: HTTP ${res.status}`)
   const total = Number(res.headers.get('content-length') ?? 0)
   let received = 0
@@ -304,7 +332,7 @@ export async function runExport(projectPath: string, baseName: string, platformI
   exporting = true
   cancelRequested = false
   try {
-    await ensureTemplates()
+    await ensureTemplates(godot)
 
     await ensureEtc2Astc(projectPath)
     await ensureNoBootSplash(projectPath)

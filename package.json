@@ -83,8 +83,8 @@
           "to": "vendor/godot/darwin"
         },
         {
-          "from": "vendor/opencode/darwin",
-          "to": "vendor/opencode/darwin"
+          "from": "vendor/codex/darwin",
+          "to": "vendor/codex/darwin"
         }
       ]
     },
@@ -98,8 +98,8 @@
           "to": "vendor/godot/win32"
         },
         {
-          "from": "vendor/opencode/win32",
-          "to": "vendor/opencode/win32"
+          "from": "vendor/codex/win32",
+          "to": "vendor/codex/win32"
         },
         {
           "from": "vendor/koffi/win32",
@@ -117,8 +117,8 @@
           "to": "vendor/godot/linux"
         },
         {
-          "from": "vendor/opencode/linux",
-          "to": "vendor/opencode/linux"
+          "from": "vendor/codex/linux",
+          "to": "vendor/codex/linux"
         }
       ]
     }

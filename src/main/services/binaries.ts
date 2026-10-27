@@ -13,7 +13,7 @@ let shellPathLoaded = false
 
 /**
  * GUI-launched apps on macOS/Linux inherit a minimal PATH that usually misses
- * user-installed tools (godot, opencode, code). Pull the real PATH from the
+ * user-installed tools (godot, git, code). Pull the real PATH from the
  * user's login shell once at startup so binary resolution behaves like their
  * terminal. Markers guard against rc files printing extra output.
  */
@@ -36,7 +36,7 @@ export async function loadShellPath(): Promise<void> {
 const EXTRA_DIRS =
   process.platform === 'win32'
     ? []
-    : ['/usr/local/bin', '/opt/homebrew/bin', join(homedir(), '.local', 'bin'), join(homedir(), '.opencode', 'bin')]
+    : ['/usr/local/bin', '/opt/homebrew/bin', join(homedir(), '.local', 'bin')]
 
 async function isExecutable(path: string): Promise<boolean> {
   try {
@@ -95,9 +95,10 @@ export function bundledGodotPath(): string {
   }
 }
 
-export function bundledOpencodePath(): string {
-  const bin = process.platform === 'win32' ? 'opencode.exe' : 'opencode'
-  return join(vendorDir(), 'opencode', process.platform, bin)
+/** The bundled Codex app-server, inside its package layout (see fetch-vendor.mjs). */
+export function bundledCodexPath(): string {
+  const bin = process.platform === 'win32' ? 'codex-app-server.exe' : 'codex-app-server'
+  return join(vendorDir(), 'codex', process.platform, 'bin', bin)
 }
 
 // Resolution order: explicit user override → bundled engine → system installs.
@@ -113,6 +114,6 @@ export async function resolveGodot(): Promise<string | null> {
   ])
 }
 
-export async function resolveOpencode(): Promise<string | null> {
-  return findBinary('opencode', [getSettings().opencodePath, bundledOpencodePath()])
+export async function resolveCodex(): Promise<string | null> {
+  return findBinary('codex-app-server', [getSettings().codexPath, bundledCodexPath()])
 }

@@ -5,8 +5,13 @@ All notable changes to GenieEngine are documented here.
 ## [Unreleased]
 
 ### Changed
-- The separate image model is gone: the chat model now reads attached images and game screenshots itself, and the game-tester subagent runs on whichever chat model (Medium or Large) the current turn uses. Both chat models must therefore accept image input; the AI settings panel shows two model sections instead of three. Recommended models are now `deepseek/deepseek-v4.1-flash` (Medium) and `moonshotai/kimi-k2.7-code` (Large). The old image-model configuration and the image-reader subagent are removed from existing OpenCode configs automatically; models on custom (non-OpenRouter) endpoints are declared image-capable so screenshots are no longer stripped before reaching them
-- The bundled OpenCode CLI is updated from 1.17.13 to 1.18.30, and `npm run setup` now replaces bundled engines whose pinned version changed instead of keeping the previously downloaded copy
+- The AI assistant now runs on OpenAI's Codex agent (the bundled `codex-app-server` 0.164.0) instead of the OpenCode CLI. Chat, live tool activity, image attachments, the question card, `/undo` / `/redo`, the Medium/Large switch and the game-tester subagent all work as before. Model endpoints must now speak the OpenAI Responses API — the only protocol Codex supports (OpenRouter does; Chat-Completions-only endpoints no longer work). Your existing setup — endpoints, models, Thinking / Reasoning effort and API keys — carries over automatically on first launch, and a saved chat continues in a new conversation seeded with a recap of the old one
+- Chat model API keys are now stored by GenieEngine itself (one owner-only file per model in its app-data folder) and attached to requests by a local proxy, so the assistant's own shell commands can no longer read them; environment variables holding keys or tokens are no longer passed to those commands either
+- The separate image model is gone: the chat model now reads attached images and game screenshots itself, and the game-tester subagent runs on whichever chat model (Medium or Large) the current turn uses. Both chat models must therefore accept image input; the AI settings panel shows two model sections instead of three. Recommended models are now `deepseek/deepseek-v4.1-flash` (Medium) and `moonshotai/kimi-k2.7-code` (Large)
+- The bundled Godot engine is updated from 4.7.1 to 4.7.2, and `npm run setup` now replaces bundled engines whose pinned version changed instead of keeping the previously downloaded copy
+
+### Fixed
+- Exporting with your own Godot install (picked via "Locate Godot") downloaded export templates for the bundled engine's version, which Godot then rejected. Templates now always match the Godot that runs the export
 
 ## [0.1.1] - 2026-07-10
 

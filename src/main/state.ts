@@ -1,27 +1,38 @@
 import { app } from 'electron'
 import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { ProjectInfo } from '../shared/types'
+import type { ChatModelTier, ReasoningEffort, ThinkingMode, ProjectInfo } from '../shared/types'
 
 /**
- * The two chat models as full `provider/model` refs. Stored here rather than
- * in opencode.json because OpenCode's config has exactly one `model` field —
- * the app instead names the chosen model explicitly on every message it
- * sends. `config.model` is still kept in sync with `medium` so OpenCode
- * sessions started outside the app behave like the app's default.
+ * One chat model slot's non-secret settings. Its API key lives in its own
+ * owner-only credential file instead (see chat-setup.ts), never in here.
  */
-export interface ChatModelRefs {
+export interface ChatSlotSettings {
+  /** Base URL of the Responses-API endpoint, e.g. https://openrouter.ai/api/v1. */
+  endpoint: string
+  model: string
+  thinking: ThinkingMode
+  effort: ReasoningEffort
+}
+
+/**
+ * How versions ≤ 0.1.2 stored the chat models: OpenCode `provider/model`
+ * refs, with endpoints and keys in OpenCode's own config files. Read once to
+ * migrate existing setups (see migrateLegacySetup in chat-setup.ts).
+ */
+export interface LegacyChatModelRefs {
   medium?: string
   large?: string
 }
 
 interface SettingsFile {
   godotPath?: string
-  opencodePath?: string
+  codexPath?: string
   recentProjects: string[]
   /** Whether the ECS viewer, files/git sidebars and console output are shown. */
   advancedMode?: boolean
-  chatModels?: ChatModelRefs
+  chatSlots?: Partial<Record<ChatModelTier, ChatSlotSettings>>
+  chatModels?: LegacyChatModelRefs
 }
 
 let settings: SettingsFile = { recentProjects: [] }
@@ -56,12 +67,13 @@ export function setGodotPath(path: string): void {
   saveSettings()
 }
 
-export function getChatModelRefs(): ChatModelRefs {
-  return settings.chatModels ?? {}
+/** Stored slot settings — unset until the first setup save (or legacy migration). */
+export function getChatSlotSettings(): SettingsFile['chatSlots'] {
+  return settings.chatSlots
 }
 
-export function setChatModelRefs(refs: ChatModelRefs): void {
-  settings.chatModels = refs
+export function setChatSlotSettings(slots: Record<ChatModelTier, ChatSlotSettings>): void {
+  settings.chatSlots = slots
   saveSettings()
 }
 
