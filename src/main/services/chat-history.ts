@@ -5,7 +5,7 @@ import { clearUndoHistory } from './snapshots'
 
 /**
  * Per-project chat persistence, stored inside the game project under
- * .genieengine/ (gitignored — chat transcripts are personal, never shared):
+ * .gamifydesktop/ (gitignored — chat transcripts are personal, never shared):
  *
  * - chat.json           the rendered transcript plus the conversation's id
  *                       (its Codex thread; `sessionID` in the file),
@@ -36,7 +36,7 @@ import { clearUndoHistory } from './snapshots'
  * so a schema change degrades to "no recap", never a crash.
  */
 
-const STATE_DIR = '.genieengine'
+const STATE_DIR = '.gamifydesktop'
 const CHAT_FILE = 'chat.json'
 const INPUT_FILE = 'input-history.json'
 const ATTACH_DIR = 'attachments'
@@ -66,11 +66,37 @@ async function writeJsonAtomic(path: string, value: unknown): Promise<void> {
   await rename(tmp, path)
 }
 
-/** Projects whose .gitignore already got the .genieengine/ entry this run. */
+/** Where versions ≤ 0.1.2 — when the app was called GenieEngine — kept this state. */
+const LEGACY_STATE_DIR = '.genieengine'
+
+/**
+ * Brings a project last opened by GenieEngine up to date: its state folder
+ * becomes .gamifydesktop/ (chat, undo history and attachments come along),
+ * and the .gitignore lines the old version wrote are renamed in place
+ * rather than duplicated next to new ones. Best-effort — a failure only
+ * means the chat starts without its old state.
+ */
+export async function migrateLegacyProjectState(projectPath: string): Promise<void> {
+  const exists = (path: string): Promise<boolean> => stat(path).then(() => true, () => false)
+  const legacy = join(projectPath, LEGACY_STATE_DIR)
+  if ((await exists(legacy)) && !(await exists(join(projectPath, STATE_DIR)))) {
+    await rename(legacy, join(projectPath, STATE_DIR)).catch(() => {})
+  }
+  const gitignorePath = join(projectPath, '.gitignore')
+  const current = await readFile(gitignorePath, 'utf8').catch(() => null)
+  if (current === null) return
+  const updated = current
+    .replace(/^([ \t]*)\.genieengine\/?([ \t]*)$/gm, `$1${STATE_DIR}/$2`)
+    .replace(/^([ \t]*)genieengine_test_agent\.gd([ \t]*)$/gm, '$1gamifydesktop_test_agent.gd$2')
+    .replace(/^# GenieEngine /gm, '# GamifyDesktop ')
+  if (updated !== current) await writeFile(gitignorePath, updated).catch(() => {})
+}
+
+/** Projects whose .gitignore already got the .gamifydesktop/ entry this run. */
 const ignoreEnsured = new Set<string>()
 
 /**
- * Creates the project's .genieengine/ state dir and keeps it out of both git
+ * Creates the project's .gamifydesktop/ state dir and keeps it out of both git
  * and Godot. Shared with test-harness.ts, which stores game screenshots here.
  */
 export async function ensureProjectStateDir(projectPath: string): Promise<string> {
@@ -83,7 +109,7 @@ export async function ensureProjectStateDir(projectPath: string): Promise<string
     const gitignorePath = join(projectPath, '.gitignore')
     const current = await readFile(gitignorePath, 'utf8').catch(() => '')
     if (!current.split('\n').some((line) => line.trim().replace(/\/$/, '') === STATE_DIR)) {
-      const entry = `${current && !current.endsWith('\n') ? '\n' : ''}\n# GenieEngine local state (chat history, attachments, test screenshots)\n${STATE_DIR}/\n`
+      const entry = `${current && !current.endsWith('\n') ? '\n' : ''}\n# GamifyDesktop local state (chat history, attachments, test screenshots)\n${STATE_DIR}/\n`
       await writeFile(gitignorePath, current + entry).catch(() => {})
     }
     // .gdignore makes Godot skip the directory entirely — without it the
@@ -223,7 +249,7 @@ async function ensureAttachmentsDir(projectPath: string): Promise<string> {
 }
 
 /**
- * Writes message attachments into .genieengine/attachments/ and returns their
+ * Writes message attachments into .gamifydesktop/attachments/ and returns their
  * project-relative paths (POSIX-style, ready for the message text). Images
  * also ride the message itself, but the path is what lets the model look at
  * one again in later turns (via view_image) and what lets the game-tester
@@ -289,7 +315,7 @@ export interface SavedUpload {
 
 /**
  * Copies path-based asset uploads (zips, folders, binary asset files) into
- * .genieengine/attachments/. The copy — rather than referencing the original
+ * .gamifydesktop/attachments/. The copy — rather than referencing the original
  * location — is what makes the upload usable at all: the assistant's sandbox
  * confines it to the project directory, so a path under ~/Downloads might as
  * well not exist. Throws (with a user-readable message) when a source is

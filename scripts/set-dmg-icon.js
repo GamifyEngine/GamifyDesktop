@@ -1,5 +1,5 @@
 // electron-builder afterAllArtifactBuild hook: give the .dmg artifact itself
-// the GenieEngine icon in Finder. electron-builder already sets the *volume*
+// the GamifyDesktop icon in Finder. electron-builder already sets the *volume*
 // icon (shown once mounted), but the downloadable .dmg file would otherwise
 // carry the generic disk-image icon. Uses the classic sips/DeRez/Rez recipe:
 // embed an icon resource into a copy of the app icon, extract it, append it

@@ -4,7 +4,7 @@ import { frameMessage, GdVector2i, MessageReader, type DebuggerMessage } from '.
 /**
  * Debug-protocol session with an embedded Godot game (macOS, Godot 4.6+).
  *
- * GenieEngine acts as the "editor" side of Godot's remote debugger: the game is
+ * GamifyDesktop acts as the "editor" side of Godot's remote debugger: the game is
  * launched with `--embedded --remote-debug tcp://127.0.0.1:<port>` which makes
  * it render into a cross-process CAContext instead of opening a window. Over
  * this channel the game reports its CAContext id (displayed in-window via the

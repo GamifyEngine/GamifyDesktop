@@ -15,8 +15,8 @@ import { extractZip } from './export'
  * puppeteer fallback is an optional dependency we deliberately never
  * install — see .puppeteerrc.cjs).
  *
- * Downloads land in `.genieengine/itch/<author>-<name>/` — a STAGING area
- * (gitignored and .gdignore'd like all of .genieengine/). The agent then
+ * Downloads land in `.gamifydesktop/itch/<author>-<name>/` — a STAGING area
+ * (gitignored and .gdignore'd like all of .gamifydesktop/). The agent then
  * copies just the files the user wants into assets/, exactly like the
  * user-uploaded asset-pack workflow in agent-instructions.md.
  */
@@ -342,7 +342,7 @@ export async function downloadItchAsset(projectPath: string, url: string): Promi
   const stateDir = await ensureProjectStateDir(projectPath)
   const destAbs = join(stateDir, 'itch', key)
   // POSIX-style for the model, matching how other tools report project paths.
-  const destRel = `.genieengine/itch/${key}`
+  const destRel = `.gamifydesktop/itch/${key}`
 
   inFlight.add(key)
   try {
@@ -382,7 +382,7 @@ export async function downloadItchAsset(projectPath: string, url: string): Promi
       `Files${truncated ? ` (first ${MAX_TREE_ENTRIES} entries)` : ''}:\n${lines.join('\n')}\n\n` +
       'These staged files are INVISIBLE to Godot and git. Copy ONLY the pieces the user wants into the proper assets/ ' +
       'sub-folders (assets/entities/<id>/, assets/ui/, assets/shared/) with your file tools, renamed to fit the project, ' +
-      'then wire them into scenes — never reference .genieengine/... paths from game code. ' +
+      'then wire them into scenes — never reference .gamifydesktop/... paths from game code. ' +
       `Remind the user to follow this asset's license terms from ${cleanUrl} (many require attribution).`
     )
   } finally {

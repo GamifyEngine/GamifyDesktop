@@ -73,7 +73,7 @@ export interface ChatDonePayload {
  * - Asset upload (`path` set): .zip archives, whole folders, and binary asset
  *   files (3D models, audio, fonts) — too big/opaque to inline, so only the
  *   absolute disk path crosses to the main process, which copies the payload
- *   into the project's .genieengine/attachments/ when the message is sent and
+ *   into the project's .gamifydesktop/attachments/ when the message is sent and
  *   points the assistant at it there.
  */
 export interface ChatAttachment {
@@ -160,17 +160,52 @@ export interface ModelSlotStatus {
   effort: ReasoningEffort
 }
 
+/**
+ * Who serves the assistant's models: the user's Gamify account (trygamify.io,
+ * paid for with the account's credits) or their own endpoints and API keys.
+ */
+export type ChatSource = 'gamify' | 'custom'
+
+/** The signed-in Gamify account, as the setup panel shows it. */
+export interface GamifyUser {
+  /** @username when the account has one (set in the iPhone app), else the name or email. */
+  displayName: string
+  email: string | null
+  credits: number
+  /** Accounts the Gamify team exempts are never charged. */
+  unlimitedCredits: boolean
+}
+
+/** State of the Gamify account connection. */
+export interface GamifyAccountStatus {
+  /** The Gamify site the account lives on (https://trygamify.io unless overridden for development). */
+  site: string
+  signedIn: boolean
+  /** True while a browser sign-in started from the app is waiting to come back. */
+  signingIn: boolean
+  /** Null while signed out, or when the account could not be loaded (offline). */
+  user: GamifyUser | null
+  /** Whether the account includes 2D art generation (turned on on the Gamify side). */
+  imageGeneration: boolean
+}
+
 /** State of the AI provider setup (API keys / endpoints / models). */
 export interface SetupStatus {
-  /** True once both chat models are usable (the chat dropdown can switch between them any time). */
+  /** Which of the two options the assistant runs on. */
+  source: ChatSource
+  /**
+   * True once the chosen source is usable: signed in to Gamify, or both own
+   * chat models connected (the chat dropdown can switch between them any time).
+   */
   configured: boolean
-  /** Everyday chat/coding model. */
+  gamify: GamifyAccountStatus
+  /** Everyday chat/coding model (own models). */
   medium: ModelSlotStatus
-  /** Heavyweight chat model for tough tasks. */
+  /** Heavyweight chat model for tough tasks (own models). */
   large: ModelSlotStatus
   /** True when Tencent HY 3D credentials are stored (enables 3D asset generation). */
   hy3dConfigured: boolean
-  /** True when an OpenAI key is stored (enables 2D image asset generation). */
+  /** True when an OpenAI key is stored (enables 2D image asset generation with your own key). */
   gptImageConfigured: boolean
 }
 
@@ -190,6 +225,8 @@ export interface ModelSlotRequest {
  * the defaults.
  */
 export interface SetupRequest {
+  /** Which option the assistant runs on from now on. */
+  source: ChatSource
   medium: ModelSlotRequest
   large: ModelSlotRequest
   /** Optional asset-generation credentials (blank = unchanged). */
@@ -283,7 +320,7 @@ export type ExportProgress =
   | { phase: 'done'; message?: string }
 
 /**
- * A code file with a parsed `#=== genieengine ===` header block (the format the
+ * A code file with a parsed `#=== gamifydesktop ===` header block (the format the
  * injected agent instructions mandate for every file the AI writes — see
  * resources/agent-instructions.md). Backs the ECS viewer in the center pane.
  */
@@ -347,7 +384,7 @@ export type GameInputEvent =
   | { type: 'blur' }
 
 /** The API the preload script exposes on `window.api`. */
-export interface GenieEngineApi {
+export interface GamifyDesktopApi {
   platform: string
 
   // App / project lifecycle
@@ -429,6 +466,17 @@ export interface GenieEngineApi {
   getSetupStatus(): Promise<Result<SetupStatus>>
   /** Credential fields left blank = leave that provider's setup unchanged. */
   saveSetup(request: SetupRequest): Promise<Result<SetupStatus>>
+  /**
+   * Signs in to a Gamify account in the browser (trygamify.io) and resolves
+   * once the browser hands the account back — the assistant then runs on it.
+   * Fails when the sign-in is cancelled, times out or is refused.
+   */
+  gamifySignIn(): Promise<Result<SetupStatus>>
+  /** Abandons a browser sign-in that is still waiting. */
+  gamifyCancelSignIn(): Promise<Result<null>>
+  gamifySignOut(): Promise<Result<SetupStatus>>
+  /** Opens the account's page on trygamify.io in the browser. */
+  openGamifyAccountPage(): Promise<Result<null>>
   onChatPart(cb: (part: ChatPartUpdate) => void): () => void
   onChatDone(cb: (payload: ChatDonePayload) => void): () => void
   /** A generated 2D/3D asset preview to render in the chat (user can give feedback). */

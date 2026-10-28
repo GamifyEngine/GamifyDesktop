@@ -2,7 +2,8 @@ import { createHash, randomBytes, timingSafeEqual } from 'node:crypto'
 import { createServer, request as httpRequest, type IncomingMessage, type Server, type ServerResponse } from 'node:http'
 import { request as httpsRequest } from 'node:https'
 import type { ChatModelTier } from '../../shared/types'
-import { isOpenRouterEndpoint, resolveChatSlot, type ResolvedChatSlot } from './chat-setup'
+import { isOpenRouterEndpoint, resolveChatRoute, type ChatRoute } from './chat-setup'
+import { forgetGamifySession, GAMIFY_CHAT_MODEL } from './gamify-account'
 
 /**
  * Local proxy between Codex and the user's model endpoints. Codex is pointed
@@ -11,7 +12,7 @@ import { isOpenRouterEndpoint, resolveChatSlot, type ResolvedChatSlot } from './
  * forwards the Responses API request to the slot's real endpoint. Why not
  * point Codex at the endpoints directly:
  *
- *  - Namespaced tools. Codex 0.164 groups MCP tools (the genieengine game
+ *  - Namespaced tools. Codex 0.164 groups MCP tools (the gamifydesktop game
  *    tools) and its subagent tools into Responses `namespace` tools, an
  *    OpenAI-specific shape. Third-party Responses implementations — OpenRouter
  *    included — document plain `function` tools only, so the game tools would
@@ -26,6 +27,11 @@ import { isOpenRouterEndpoint, resolveChatSlot, type ResolvedChatSlot } from './
  *    different keys. Routing on the model name lets one conversation move
  *    between them freely.
  *  - Thinking / reasoning effort, mapped onto each provider's wire spelling.
+ *  - The Gamify account. When the assistant runs on it, both slots go to the
+ *    Gamify backend with the account's session token instead (the backend
+ *    picks the model and charges the account's credits) — switching between
+ *    it and the user's own models is again just a different route per
+ *    request.
  *
  * Bound to 127.0.0.1 and guarded by the token, so other local processes
  * can't spend the user's credits through it.
@@ -125,17 +131,48 @@ async function handle(req: IncomingMessage, res: ServerResponse, token: string):
   // Anything but 'large' — including a model a subagent was spawned with
   // explicitly — runs on the Medium slot.
   const tier: ChatModelTier = body.model === 'large' ? 'large' : 'medium'
-  const slot = await resolveChatSlot(tier)
-  if (!slot.apiKey) {
-    return sendError(
-      res,
-      401,
-      `No API key is configured for the ${tier === 'large' ? 'Large' : 'Medium'} model. ` +
-        'Add one in the AI settings (gear icon), then try again.'
-    )
+  const route = await resolveChatRoute(tier)
+  let upstream: Upstream
+  if (route.kind === 'gamify') {
+    if (!route.token) {
+      return sendError(
+        res,
+        401,
+        'You are signed out of your Gamify account. Sign in again in the AI settings (gear icon), then try again.'
+      )
+    }
+    // Codex's per-conversation request id: the backend files the usage under it.
+    const requestId = req.headers['x-client-request-id']
+    upstream = {
+      endpoint: route.endpoint,
+      bearer: route.token,
+      gamify: true,
+      headers: typeof requestId === 'string' ? { 'x-client-request-id': requestId } : {}
+    }
+  } else {
+    if (!route.apiKey) {
+      return sendError(
+        res,
+        401,
+        `No API key is configured for the ${tier === 'large' ? 'Large' : 'Medium'} model. ` +
+          'Add one in the AI settings (gear icon), then try again.'
+      )
+    }
+    upstream = { endpoint: route.endpoint, bearer: route.apiKey, gamify: false, headers: {} }
   }
-  const restore = rewriteRequest(body, slot)
-  forward(res, slot, JSON.stringify(body), restore)
+  const restore = rewriteRequest(body, route)
+  forward(res, upstream, JSON.stringify(body), restore)
+}
+
+/** Where a request goes and what it authenticates with. */
+interface Upstream {
+  /** Base URL of the Responses API; /responses is appended. */
+  endpoint: string
+  bearer: string
+  /** The Gamify backend, where a 401 means the account's session has ended. */
+  gamify: boolean
+  /** Extra request headers passed on. */
+  headers: Record<string, string>
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any -- Responses API payloads are open-ended JSON */
@@ -167,7 +204,7 @@ const isToolCall = (item: Json | undefined): boolean =>
  * Turns Codex's request into one any Responses endpoint accepts, in place.
  * Returns what's needed to map the response's tool calls back.
  */
-function rewriteRequest(body: Json, slot: ResolvedChatSlot): RestoreMap {
+function rewriteRequest(body: Json, route: ChatRoute): RestoreMap {
   const restore: RestoreMap = new Map()
   if (Array.isArray(body.tools)) {
     body.tools = body.tools.flatMap((tool: Json) => {
@@ -191,19 +228,24 @@ function rewriteRequest(body: Json, slot: ResolvedChatSlot): RestoreMap {
     delete body.tool_choice.namespace
   }
 
-  body.model = slot.model
   // Codex-internal request metadata (installation/session ids) — OpenAI-only,
   // and nothing a third-party provider needs to see.
   delete body.client_metadata
+  if (route.kind === 'gamify') {
+    // The backend swaps in the model its manager configured, with its own settings.
+    body.model = GAMIFY_CHAT_MODEL
+    return restore
+  }
+  body.model = route.model
   // Effort uses the Responses API's own field. Thinking has no standard
   // Responses field: OpenRouter's unified spelling is `reasoning.enabled`;
   // elsewhere the slot keeps sending the top-level `thinking` field these
   // settings have always sent (DeepSeek-style, honored by the servers that
   // implement hybrid thinking).
-  if (slot.effort !== 'default') body.reasoning = { ...body.reasoning, effort: slot.effort }
-  if (slot.thinking !== 'default') {
-    if (isOpenRouterEndpoint(slot.endpoint)) body.reasoning = { ...body.reasoning, enabled: slot.thinking === 'enabled' }
-    else body.thinking = { type: slot.thinking }
+  if (route.effort !== 'default') body.reasoning = { ...body.reasoning, effort: route.effort }
+  if (route.thinking !== 'default') {
+    if (isOpenRouterEndpoint(route.endpoint)) body.reasoning = { ...body.reasoning, enabled: route.thinking === 'enabled' }
+    else body.thinking = { type: route.thinking }
   }
   return restore
 }
@@ -269,12 +311,12 @@ function errorMessageOf(status: number, raw: string): string {
  * node:http(s), not fetch: undici aborts bodies idle for 5 minutes, and a
  * reasoning model can legitimately go quiet that long mid-stream.
  */
-function forward(res: ServerResponse, slot: ResolvedChatSlot, payload: string, restore: RestoreMap): void {
+function forward(res: ServerResponse, target: Upstream, payload: string, restore: RestoreMap): void {
   let url: URL
   try {
-    url = new URL(`${slot.endpoint.replace(/\/+$/, '')}/responses`)
+    url = new URL(`${target.endpoint.replace(/\/+$/, '')}/responses`)
   } catch {
-    return sendError(res, 400, `"${slot.endpoint}" is not a valid API endpoint URL — fix it in the AI settings.`)
+    return sendError(res, 400, `"${target.endpoint}" is not a valid API endpoint URL — fix it in the AI settings.`)
   }
   const send = url.protocol === 'https:' ? httpsRequest : httpRequest
   const upstream = send(
@@ -283,15 +325,19 @@ function forward(res: ServerResponse, slot: ResolvedChatSlot, payload: string, r
       method: 'POST',
       timeout: 0,
       headers: {
+        ...target.headers,
         'content-type': 'application/json',
         accept: 'text/event-stream',
-        authorization: `Bearer ${slot.apiKey}`,
+        authorization: `Bearer ${target.bearer}`,
         'content-length': Buffer.byteLength(payload)
       }
     },
     (up) => {
       const status = up.statusCode ?? 502
       const type = String(up.headers['content-type'] ?? '')
+      // The account's session is gone (signed out elsewhere, revoked): the
+      // setup panel asks to sign in again.
+      if (target.gamify && status === 401) void forgetGamifySession(target.bearer)
       res.writeHead(status, { 'content-type': type || 'application/json' })
       if (status >= 300) {
         // Pass the provider's error through for Codex, remembering it too.
@@ -317,7 +363,7 @@ function forward(res: ServerResponse, slot: ResolvedChatSlot, payload: string, r
     }
   )
   upstream.on('error', (err) => {
-    lastFailure = { at: Date.now(), message: `Could not reach ${slot.endpoint} (${err.message})` }
+    lastFailure = { at: Date.now(), message: `Could not reach ${target.endpoint} (${err.message})` }
     if (res.headersSent) res.destroy()
     else sendError(res, 502, lastFailure.message)
   })

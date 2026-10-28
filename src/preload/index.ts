@@ -1,5 +1,5 @@
 import { contextBridge, ipcRenderer, webUtils } from 'electron'
-import type { GenieEngineApi } from '../shared/types'
+import type { GamifyDesktopApi } from '../shared/types'
 
 function invoke<T>(channel: string, ...args: unknown[]): Promise<T> {
   return ipcRenderer.invoke(channel, ...args) as Promise<T>
@@ -13,7 +13,7 @@ function subscribe(channel: string, cb: (...args: never[]) => void): () => void 
   return () => ipcRenderer.removeListener(channel, listener)
 }
 
-const api: GenieEngineApi = {
+const api: GamifyDesktopApi = {
   platform: process.platform,
 
   getInitialState: () => invoke('app:getInitialState'),
@@ -61,6 +61,10 @@ const api: GenieEngineApi = {
   chatRejectQuestion: (requestID) => invoke('chat:rejectQuestion', requestID),
   getSetupStatus: () => invoke('chat:setupStatus'),
   saveSetup: (request) => invoke('chat:saveSetup', request),
+  gamifySignIn: () => invoke('account:signIn'),
+  gamifyCancelSignIn: () => invoke('account:cancelSignIn'),
+  gamifySignOut: () => invoke('account:signOut'),
+  openGamifyAccountPage: () => invoke('account:openPage'),
   onChatPart: (cb) => subscribe('chat:part', cb),
   onChatDone: (cb) => subscribe('chat:done', cb),
   onAssetPreview: (cb) => subscribe('chat:asset-preview', cb),

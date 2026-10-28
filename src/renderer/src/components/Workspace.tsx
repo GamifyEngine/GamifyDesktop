@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import type { ProjectInfo } from '../../../shared/types'
+import type { ChatSource, ProjectInfo } from '../../../shared/types'
 import { ChatPanel } from './ChatPanel'
 import { FilesPanel } from './FilesPanel'
 import { GitPanel } from './GitPanel'
@@ -11,6 +11,8 @@ interface Props {
   project: ProjectInfo
   width: number
   assistantAvailable: boolean
+  /** What the assistant runs on — the chat's model picker only applies to own models. */
+  chatSource: ChatSource
   advancedMode: boolean
 }
 
@@ -24,7 +26,7 @@ const TABS: { id: Tab; label: string; icon: React.JSX.Element }[] = [
  * The right-hand workspace sidebar. All three panels stay mounted (hidden via
  * CSS) so chat history, expanded folders and git state survive tab switches.
  */
-export function Workspace({ project, width, assistantAvailable, advancedMode }: Props): React.JSX.Element {
+export function Workspace({ project, width, assistantAvailable, chatSource, advancedMode }: Props): React.JSX.Element {
   const [tab, setTab] = useState<Tab>('chat')
   // Bumped when the AI finishes work or the window refocuses, so the files
   // and git panels refresh to reflect changes made outside the UI.
@@ -59,7 +61,12 @@ export function Workspace({ project, width, assistantAvailable, advancedMode }: 
       )}
       <div className="workspace-body">
         <div className="panel" style={{ display: !advancedMode || tab === 'chat' ? 'flex' : 'none' }}>
-          <ChatPanel projectPath={project.path} assistantAvailable={assistantAvailable} onAssistantDone={bump} />
+          <ChatPanel
+            projectPath={project.path}
+            assistantAvailable={assistantAvailable}
+            chatSource={chatSource}
+            onAssistantDone={bump}
+          />
         </div>
         <div className="panel" style={{ display: advancedMode && tab === 'files' ? 'flex' : 'none' }}>
           <FilesPanel project={project} refreshToken={workVersion} />

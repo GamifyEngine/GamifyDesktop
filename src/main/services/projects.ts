@@ -3,6 +3,7 @@ import { existsSync } from 'node:fs'
 import { mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import type { ProjectInfo } from '../../shared/types'
+import { migrateLegacyProjectState } from './chat-history'
 import { commit, init, stage } from './git'
 import { agentsMd, gitignore, iconSvg, mainGd, mainTscn, projectGodot } from './templates'
 
@@ -52,7 +53,7 @@ export async function createProject(parentDir: string, name: string): Promise<Pr
   try {
     await init(dir)
     await stage(dir, ['.'])
-    await commit(dir, 'Initial commit — created with GenieEngine')
+    await commit(dir, 'Initial commit — created with GamifyDesktop')
   } catch {
     /* ignore */
   }
@@ -62,11 +63,11 @@ export async function createProject(parentDir: string, name: string): Promise<Pr
 
 /**
  * SHA-256 of every AGENTS.md body (everything after the title line, which
- * carries the project name) that a past GenieEngine version scaffolded —
+ * carries the project name) that a past GamifyDesktop version scaffolded —
  * rendered from each historical agentsMd() in templates.ts's git history.
  * A body that hash-matches was written by the app and never edited, so
  * refreshAgentsMd may safely replace the file; anything else belongs to the
- * user (or the assistant, or a non-GenieEngine project) and is left alone.
+ * user (or the assistant, or a non-GamifyDesktop project) and is left alone.
  *
  * When agentsMd() changes, add the OUTGOING version's hash here — sha256 of
  * agentsMd('x') after the first newline — or projects created on the old
@@ -81,7 +82,8 @@ const APP_OWNED_AGENTS_BODY_HASHES = new Set([
   '0b2bcbb08334ae49e0d55530034895177a6e90c434c9e691eb23e7c425a1f477', // 68e9314
   '8fb4d86fbe7d01774059d6ea857ba35b0a61b182805442b1c9b942fa40918c6b', // c1f0186
   'd724eddeac410d986eeb994df0508ec366bc27b6a544c15091c000584e659d6f', // 48a75b9
-  '6d0daa704600515b97ed8755c89af42b1b7d5c8636adb314b2808bfb4b3d1ffe' // 48a75b9 + uncommitted 2026-07 test-budget edits
+  '6d0daa704600515b97ed8755c89af42b1b7d5c8636adb314b2808bfb4b3d1ffe', // 48a75b9 + uncommitted 2026-07 test-budget edits
+  '151e4cac9e17ce46067f2848b1df94ce37ed3475bc51a9d4611b1fdb2c33a8ab' // eff525c (last template naming GenieEngine)
 ])
 
 function agentsBodyHash(content: string): string {
@@ -92,7 +94,7 @@ function agentsBodyHash(content: string): string {
 
 /**
  * Upgrade a scaffolded AGENTS.md to the current template when the project is
- * opened. Early GenieEngine versions froze the full build rules into each
+ * opened. Early GamifyDesktop versions froze the full build rules into each
  * project's AGENTS.md; those rules now ship with the app and are injected per
  * chat server (see agentInstructions in codex-config.ts), so a
  * stale copy would sit in the system prompt alongside — and contradict — the
@@ -119,10 +121,11 @@ export async function openProject(dir: string): Promise<ProjectInfo> {
   if (!existsSync(join(dir, 'project.godot'))) {
     throw new Error(
       'The selected folder is not a Godot project (no project.godot found). ' +
-        'Choose a project created with GenieEngine or an existing Godot 4 project.'
+        'Choose a project created with GamifyDesktop or an existing Godot 4 project.'
     )
   }
   const name = await readProjectName(dir)
+  await migrateLegacyProjectState(dir)
   await refreshAgentsMd(dir, name)
   return { path: dir, name }
 }

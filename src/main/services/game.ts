@@ -24,7 +24,7 @@ import { windowHandleArg, winhost, type WinHost } from './winhost'
 
 /**
  * Runs the user's game with the full desktop engine, rendered *inside* the
- * GenieEngine window. Uses Godot 4.6+'s embedded display server (the same
+ * GamifyDesktop window. Uses Godot 4.6+'s embedded display server (the same
  * mechanism the Godot editor uses for its in-editor game view on macOS): the
  * game process renders into a cross-process CoreAnimation context, which we
  * composite via the layerhost native addon; display state and input travel
@@ -168,11 +168,11 @@ function pipeLines(stream: NodeJS.ReadableStream | null): void {
 
 /**
  * Record a completed 60s frame-rate window: into the game console/log buffer
- * (so the AI's game_logs tool sees it) and the project's .genieengine/perf.log
+ * (so the AI's game_logs tool sees it) and the project's .gamifydesktop/perf.log
  * (persistent history for diagnosing performance across runs).
  */
 function logPerfStats(stats: PerfStats): void {
-  emitLog(`[genieengine] fps ${formatPerfStats(stats)} — history in .genieengine/perf.log`)
+  emitLog(`[gamifydesktop] fps ${formatPerfStats(stats)} — history in .gamifydesktop/perf.log`)
   if (injectedProjectPath) {
     void appendPerfLog(injectedProjectPath, state.mode ?? 'native', stats)
   }
@@ -187,7 +187,7 @@ function handlePerfFrames(deltas: number[]): void {
 
 function godotMissingError(): Error {
   return new Error(
-    'The bundled Godot engine is missing. Reinstall GenieEngine (or run `npm run setup` in development), or locate a Godot binary manually.'
+    'The bundled Godot engine is missing. Reinstall GamifyDesktop (or run `npm run setup` in development), or locate a Godot binary manually.'
   )
 }
 
@@ -219,7 +219,7 @@ function layerhost(): LayerHostAddon | null {
     // eslint-disable-next-line @typescript-eslint/no-require-imports
     layerHostAddon = require(path) as LayerHostAddon
   } catch (err) {
-    console.error('[genieengine] failed to load layerhost addon:', err)
+    console.error('[gamifydesktop] failed to load layerhost addon:', err)
     layerHostAddon = null
   }
   return layerHostAddon
@@ -267,7 +267,7 @@ function updateWinEmbedFrame(): void {
 }
 
 // The embedded window sits at an absolute screen position, so dragging or
-// resizing the GenieEngine window must re-glue it (stage-rect reports from the
+// resizing the GamifyDesktop window must re-glue it (stage-rect reports from the
 // renderer only cover layout changes INSIDE the window).
 const onHostWindowMoved = (): void => updateWinEmbedFrame()
 
@@ -301,7 +301,7 @@ function beginWinEmbedAttach(session: EmbedSession, win: BrowserWindow, addon: W
   const deadline = Date.now() + 45000
   const giveUp = (why: string): void => {
     stopWinAttachPoll()
-    emitLog(`[genieengine] window embedding unavailable (${why}) — the game plays in its own window`)
+    emitLog(`[gamifydesktop] window embedding unavailable (${why}) — the game plays in its own window`)
     setState({ status: 'running', mode: 'native', view: 'external' })
   }
   const tick = (): void => {
@@ -323,7 +323,7 @@ function beginWinEmbedAttach(session: EmbedSession, win: BrowserWindow, addon: W
       stopWinAttachPoll()
       winAttached = true
       trackHostWindow(win)
-      emitLog('[genieengine] game embedded over the GenieEngine window (native, full performance)')
+      emitLog('[gamifydesktop] game embedded over the GamifyDesktop window (native, full performance)')
       setState({ status: 'running', mode: 'native', view: 'embedded-window' })
     } else if (Date.now() > deadline) {
       giveUp('game window not found')
@@ -398,7 +398,7 @@ function updateTestMonitorLayer(): void {
   } catch (err) {
     // The run works without the live view — don't let a compositing failure
     // take down the test session.
-    emitLog(`[genieengine] live test monitor unavailable: ${err instanceof Error ? err.message : String(err)}`)
+    emitLog(`[gamifydesktop] live test monitor unavailable: ${err instanceof Error ? err.message : String(err)}`)
   }
 }
 
@@ -525,7 +525,7 @@ function handleWheel(event: Extract<GameInputEvent, { type: 'wheel' }>): void {
  *  - Windows: Godot's --wid owned-window embedding + the winhost glue, for
  *    visible play only (test runs have nothing to gain from being glued over
  *    the stage).
- *  - Anywhere else (Linux, failed addon/FFI loads, GENIEENGINE_WINDOWED=1
+ *  - Anywhere else (Linux, failed addon/FFI loads, GAMIFYDESKTOP_WINDOWED=1
  *    which forces this path for debugging): the game plays in its own OS
  *    window over the same debug channel.
  */
@@ -533,7 +533,7 @@ async function playNativeEmbedded(godot: string, projectPath: string, visible: b
   const win = getMainWindow()
   if (!win) throw new Error('Main window unavailable')
   const addon = layerhost()
-  const forceWindowed = Boolean(process.env.GENIEENGINE_WINDOWED)
+  const forceWindowed = Boolean(process.env.GAMIFYDESKTOP_WINDOWED)
   const embedded = process.platform === 'darwin' && !forceWindowed && (!visible || addon !== null)
   const winHost = !embedded && !forceWindowed && visible && process.platform === 'win32' ? winhost() : null
   embeddedRun = embedded
@@ -552,10 +552,10 @@ async function playNativeEmbedded(godot: string, projectPath: string, visible: b
         // attach() shows the layer; honor the renderer's requested visibility
         // in case a modal opened before the game finished launching.
         if (!layerVisibleWanted) addon!.setVisible(false)
-        emitLog('[genieengine] game embedded in the GenieEngine window (native, full performance)')
+        emitLog('[gamifydesktop] game embedded in the GamifyDesktop window (native, full performance)')
         setState({ status: 'running', mode: 'native', view: 'embedded' })
       } else {
-        emitLog('[genieengine] game running off-screen for an AI test run')
+        emitLog('[gamifydesktop] game running off-screen for an AI test run')
         testContextId = contextId
         testGameSize = { width: rect.width, height: rect.height }
         // The monitor box may already be on screen (e.g. a second test run in
@@ -631,16 +631,16 @@ async function playNativeEmbedded(godot: string, projectPath: string, visible: b
         // around now — find it and glue it over the stage.
         beginWinEmbedAttach(session, win, winHost, proc.pid)
       } else if (visible) {
-        emitLog('[genieengine] game running in its own window (in-app game view is unavailable on this platform)')
+        emitLog('[gamifydesktop] game running in its own window (in-app game view is unavailable on this platform)')
         setState({ status: 'running', mode: 'native', view: 'external' })
       } else {
-        emitLog('[genieengine] game running in a separate window for an AI test run')
+        emitLog('[gamifydesktop] game running in a separate window for an AI test run')
         setState({ status: 'running', mode: 'test', liveView: false, view: 'external' })
       }
     }
   }
   proc.once('exit', (code, signal) => {
-    emitLog(`[genieengine] game exited (${signal ?? `code ${code ?? 0}`})`)
+    emitLog(`[gamifydesktop] game exited (${signal ?? `code ${code ?? 0}`})`)
     // Only tear down if this process is still the active run. After a Stop,
     // the old process exits up to 1.5s later (grace period before kill); by
     // then a new run may own nativeProcess/embedSession, and tearing down
@@ -663,7 +663,7 @@ export async function playGame(projectPath: string): Promise<void> {
   setState({ status: 'starting' })
   try {
     // The agent also runs during user play — it supplies the frame timings
-    // behind the FPS counter and .genieengine/perf.log (probe commands stay
+    // behind the FPS counter and .gamifydesktop/perf.log (probe commands stay
     // test-only: runTestCommand refuses outside test mode).
     await cleanupTestAgent(projectPath) // stale files from a crashed run
     await injectTestAgent(projectPath)
@@ -842,6 +842,6 @@ export async function runTestInput(actions: TestInputAction[]): Promise<void> {
 export async function openGodotEditor(projectPath: string): Promise<void> {
   const godot = await resolveGodot()
   if (!godot) throw godotMissingError()
-  // Detached so the editor outlives GenieEngine if the user quits.
+  // Detached so the editor outlives GamifyDesktop if the user quits.
   spawn(godot, ['--editor', '--path', projectPath], { detached: true, stdio: 'ignore' }).unref()
 }

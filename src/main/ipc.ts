@@ -26,6 +26,7 @@ import {
   undoChat
 } from './services/codex'
 import { getSetupStatus, saveSetup } from './services/chat-setup'
+import { cancelGamifySignIn, openGamifyAccountPage, signInToGamify, signOutOfGamify } from './services/gamify-account'
 import { cancelExport, revealExport, runExport } from './services/export'
 import type { ExportPlatform } from '../shared/types'
 import { createProject, openProject, projectInfoFor } from './services/projects'
@@ -36,6 +37,7 @@ import {
   getRecentProjectPaths,
   requireProject,
   setAdvancedMode,
+  setChatSourceSetting,
   setCurrentProject,
   setGodotPath
 } from './state'
@@ -188,6 +190,20 @@ export function registerIpcHandlers(): void {
     await saveSetup(request)
     return getSetupStatus()
   })
+
+  // ---- Gamify account ----------------------------------------------------------
+  handle('account:signIn', async () => {
+    await signInToGamify()
+    // Signing in is choosing the account: the assistant runs on it from now on.
+    setChatSourceSetting('gamify')
+    return getSetupStatus()
+  })
+  handle('account:cancelSignIn', () => cancelGamifySignIn())
+  handle('account:signOut', async () => {
+    await signOutOfGamify()
+    return getSetupStatus()
+  })
+  handle('account:openPage', () => openGamifyAccountPage())
 
   // ---- Export ----------------------------------------------------------------
   handle('export:run', (name: string, platforms: ExportPlatform[]) =>

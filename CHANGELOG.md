@@ -1,10 +1,16 @@
 # Changelog
 
-All notable changes to GenieEngine are documented here.
+All notable changes to GamifyDesktop (called GenieEngine up to 0.1.2) are documented here.
 
 ## [Unreleased]
 
+### Added
+- Gamify accounts: the AI settings now offer two ways to run the assistant. **Gamify Account** — click **Sign in with Gamify**, sign in with Apple at trygamify.io in your browser, and GamifyDesktop signs you in by itself; the assistant's models and 2D art generation are then paid for with the account's credits, no API keys needed. **Your Own Models** — your endpoints and keys, as before. The chat's Medium/Large switch only appears with your own models
+
 ### Changed
+- GenieEngine is now GamifyDesktop: the app, the installer, the app id (`io.trygamify.desktop`), its data folder and the per-project state folder (`.gamifydesktop/`). On first launch, settings, API keys and chats from GenieEngine carry over; a project's `.genieengine/` folder (chat, undo history, attachments) moves when the project is opened, with its `.gitignore` lines renamed in place; and code files keep their `#=== genieengine ===` headers, which still count
+- The app icon and logo are now Gamify's controller
+- Exported iOS and macOS builds default to the bundle identifier `io.trygamify.games.<name>` (was `ai.genieengine.<name>`); export presets you already have are unchanged
 - The AI assistant now runs on OpenAI's Codex agent (the bundled `codex-app-server` 0.164.0) instead of the OpenCode CLI. Chat, live tool activity, image attachments, the question card, `/undo` / `/redo`, the Medium/Large switch and the game-tester subagent all work as before. Model endpoints must now speak the OpenAI Responses API — the only protocol Codex supports (OpenRouter does; Chat-Completions-only endpoints no longer work). Your existing setup — endpoints, models, Thinking / Reasoning effort and API keys — carries over automatically on first launch, and a saved chat continues in a new conversation seeded with a recap of the old one
 - Chat model API keys are now stored by GenieEngine itself (one owner-only file per model in its app-data folder) and attached to requests by a local proxy, so the assistant's own shell commands can no longer read them; environment variables holding keys or tokens are no longer passed to those commands either
 - The separate image model is gone: the chat model now reads attached images and game screenshots itself, and the game-tester subagent runs on whichever chat model (Medium or Large) the current turn uses. Both chat models must therefore accept image input; the AI settings panel shows two model sections instead of three. Recommended models are now `deepseek/deepseek-v4.1-flash` (Medium) and `moonshotai/kimi-k2.7-code` (Large)

@@ -3,12 +3,13 @@ import { join } from 'node:path'
 import type { EcsNode } from '../../shared/types'
 
 /**
- * Scans a project for code files carrying the `#=== genieengine ===` header
+ * Scans a project for code files carrying the `#=== gamifydesktop ===` header
  * block that the injected agent instructions mandate (the "File headers"
  * section of resources/agent-instructions.md — change the format there and
  * this parser in lockstep) and parses them into nodes for the ECS viewer.
  * Files without a header simply don't appear — the viewer shows the
- * documented graph.
+ * documented graph. Files written before the rename carry the same block
+ * under its old name, `#=== genieengine ===`, which is read the same way.
  */
 
 const SKIP_DIRS = new Set(['exports', 'node_modules'])
@@ -47,14 +48,14 @@ interface ParsedHeader {
   extra: string[]
 }
 
-/** Parse the first `#=== genieengine ===` … `#=== /genieengine ===` block. */
+/** Parse the first `#=== gamifydesktop ===` … `#=== /gamifydesktop ===` block (or its pre-rename `genieengine` form). */
 function parseHeader(src: string, comment: string): ParsedHeader | null {
   const esc = comment.replace(/\//g, '\\/')
-  const block = new RegExp(`^${esc}=== genieengine ===[ \\t]*\\r?\\n([\\s\\S]*?)^${esc}=== \\/genieengine ===`, 'm').exec(src)
+  const block = new RegExp(`^${esc}=== (gamifydesktop|genieengine) ===[ \\t]*\\r?\\n([\\s\\S]*?)^${esc}=== \\/\\1 ===`, 'm').exec(src)
   if (!block) return null
   const fields: Record<string, string> = {}
   const extra: string[] = []
-  for (const raw of block[1].split(/\r?\n/)) {
+  for (const raw of block[2].split(/\r?\n/)) {
     const line = raw.trim()
     if (!line.startsWith(comment)) continue
     const body = line.slice(comment.length).trim()

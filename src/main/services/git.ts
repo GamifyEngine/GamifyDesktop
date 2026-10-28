@@ -14,7 +14,7 @@ interface GitOutput {
 }
 
 /**
- * GenieEngine bundles git via dugite, so source control works on machines with
+ * GamifyDesktop bundles git via dugite, so source control works on machines with
  * no git installed. A system git is still preferred when present because it
  * carries the user's credential helpers (keychain etc.), which makes
  * push/pull to private remotes work seamlessly.
@@ -168,7 +168,7 @@ async function commitIdentityArgs(cwd: string): Promise<string[]> {
     // No git identity configured (typical on a fresh machine using the
     // bundled git). Fall back to a local default so committing works out of
     // the box; users can set their real identity via `git config --global`.
-    return ['-c', 'user.name=GenieEngine', '-c', 'user.email=genieengine@localhost']
+    return ['-c', 'user.name=GamifyDesktop', '-c', 'user.email=gamifydesktop@localhost']
   }
 }
 

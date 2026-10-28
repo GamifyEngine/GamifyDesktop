@@ -1,11 +1,11 @@
 #!/usr/bin/env node
 /**
- * MCP (Model Context Protocol) stdio server that exposes GenieEngine's game
+ * MCP (Model Context Protocol) stdio server that exposes GamifyDesktop's game
  * testing tools to the Codex agent. It is a thin bridge: every tool call is
- * forwarded over HTTP to the running GenieEngine app. The app is discovered
- * via GENIEENGINE_HARNESS_PORT/TOKEN env vars (set by the app on the Codex
+ * forwarded over HTTP to the running GamifyDesktop app. The app is discovered
+ * via GAMIFYDESKTOP_HARNESS_PORT/TOKEN env vars (set by the app on the Codex
  * server it spawns and passed through to this process — always the right
- * instance), falling back to harness.json in GenieEngine's userData directory
+ * instance), falling back to harness.json in GamifyDesktop's userData directory
  * for agent sessions that weren't launched by the app.
  *
  * Spawned by Codex (registered per spawn by the app, see codex-config.ts)
@@ -21,20 +21,20 @@ import { createInterface } from 'node:readline'
 function userDataDir() {
   switch (process.platform) {
     case 'darwin':
-      return join(homedir(), 'Library', 'Application Support', 'GenieEngine')
+      return join(homedir(), 'Library', 'Application Support', 'GamifyDesktop')
     case 'win32':
-      return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'GenieEngine')
+      return join(process.env.APPDATA ?? join(homedir(), 'AppData', 'Roaming'), 'GamifyDesktop')
     default:
-      return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'GenieEngine')
+      return join(process.env.XDG_CONFIG_HOME ?? join(homedir(), '.config'), 'GamifyDesktop')
   }
 }
 
 function readHarness() {
-  // Env vars come from the GenieEngine instance that spawned this Codex
+  // Env vars come from the GamifyDesktop instance that spawned this Codex
   // server, so they can't point at the wrong instance and don't suffer the
   // shared-file races harness.json has when several instances run at once
   // (e.g. dev + packaged: one quitting used to delete the other's file).
-  const { GENIEENGINE_HARNESS_PORT: envPort, GENIEENGINE_HARNESS_TOKEN: envToken } = process.env
+  const { GAMIFYDESKTOP_HARNESS_PORT: envPort, GAMIFYDESKTOP_HARNESS_TOKEN: envToken } = process.env
   if (envPort && envToken) return { port: Number(envPort), token: envToken }
   try {
     return JSON.parse(readFileSync(join(userDataDir(), 'harness.json'), 'utf8'))
@@ -56,7 +56,7 @@ function harnessRequest(harness, method, path, body) {
         port: harness.port,
         method,
         path,
-        headers: { 'content-type': 'application/json', 'x-genieengine-token': harness.token },
+        headers: { 'content-type': 'application/json', 'x-gamifydesktop-token': harness.token },
         timeout: 0
       },
       (res) => {
@@ -81,12 +81,12 @@ function harnessRequest(harness, method, path, body) {
 async function callHarness(name, args) {
   const harness = readHarness()
   if (!harness) {
-    return { ok: false, text: 'GenieEngine does not appear to be running (harness.json not found). These tools only work while the GenieEngine app is open.' }
+    return { ok: false, text: 'GamifyDesktop does not appear to be running (harness.json not found). These tools only work while the GamifyDesktop app is open.' }
   }
   try {
     return await harnessRequest(harness, 'POST', '/tool', JSON.stringify({ name, arguments: args }))
   } catch (err) {
-    return { ok: false, text: `Failed to reach GenieEngine: ${err.message}` }
+    return { ok: false, text: `Failed to reach GamifyDesktop: ${err.message}` }
   }
 }
 
@@ -105,7 +105,7 @@ const TOOLS = [
   {
     name: 'run_game_test',
     description:
-      'Start the currently open GenieEngine game project for AI testing. The game runs the full native engine (rendering, physics) — off-screen on macOS, in a separate visible window on Windows/Linux; every game_* tool works the same either way. Always call this before other game_* tools, and stop_game_test when done.',
+      'Start the currently open GamifyDesktop game project for AI testing. The game runs the full native engine (rendering, physics) — off-screen on macOS, in a separate visible window on Windows/Linux; every game_* tool works the same either way. Always call this before other game_* tools, and stop_game_test when done.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false }
   },
   {
@@ -139,7 +139,7 @@ const TOOLS = [
   {
     name: 'game_screenshot',
     description:
-      'Capture a PNG screenshot of the running test game. Returns the image (look at it) and saves it inside the project at .genieengine/test-shots/ — read that saved path to see it again later. Never copy screenshots or read them from anywhere else.',
+      'Capture a PNG screenshot of the running test game. Returns the image (look at it) and saves it inside the project at .gamifydesktop/test-shots/ — read that saved path to see it again later. Never copy screenshots or read them from anywhere else.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false }
   },
   {
@@ -160,7 +160,7 @@ const TOOLS = [
   {
     name: 'game_logs',
     description:
-      'Get the game\'s recent console output (prints and script errors) and current run status. Includes "[genieengine] fps" lines with frame-rate stats (avg/min/max/1% low/0.1% low per 60s window). The full frame-rate history across runs — including the user\'s own play sessions — persists in .genieengine/perf.log; read that file when diagnosing performance problems.',
+      'Get the game\'s recent console output (prints and script errors) and current run status. Includes "[gamifydesktop] fps" lines with frame-rate stats (avg/min/max/1% low/0.1% low per 60s window). The full frame-rate history across runs — including the user\'s own play sessions — persists in .gamifydesktop/perf.log; read that file when diagnosing performance problems.',
     inputSchema: { type: 'object', properties: {}, additionalProperties: false }
   },
   {
@@ -186,7 +186,7 @@ const TOOLS = [
   {
     name: 'itch_download',
     description:
-      "Download a FREE asset from its itch.io page (URL shaped https://<author>.itch.io/<name>) into the project's .genieengine/itch/ " +
+      "Download a FREE asset from its itch.io page (URL shaped https://<author>.itch.io/<name>) into the project's .gamifydesktop/itch/ " +
       'staging folder — zip archives are auto-extracted — and return the file listing. Only free assets work (no purchases, no account). ' +
       'Staged files are INVISIBLE to Godot and git: afterwards copy just the pieces the user wants into the proper assets/ sub-folders ' +
       'with your file tools and wire them into scenes. Only call this after the user has picked an asset.',
@@ -201,13 +201,14 @@ const TOOLS = [
 ]
 
 /**
- * Offered only when the user has configured an OpenAI API key in GenieEngine's
+ * Offered only when 2D generation is available — the assistant runs on a
+ * Gamify account, or the user configured an OpenAI API key in GamifyDesktop's
  * settings panel (checked via /capabilities at list time).
  */
 const GPT_IMAGE_TOOL = {
   name: 'generate_2d_asset',
   description:
-    'Generate a 2D image asset (sprite, icon, texture, UI art) with OpenAI image generation and save it into the project\'s assets/ folder. ' +
+    'Generate a 2D image asset (sprite, icon, texture, UI art) with AI image generation and save it into the project\'s assets/ folder. ' +
     'Fixed output: one 1024×1024 PNG with a TRANSPARENT background at medium quality — ideal for sprites and icons. ' +
     'Takes ~10-60 seconds; returns the written file path plus the image itself so you can check it. ' +
     'Describe ONE subject per call (subject, colors/materials, art style, camera angle e.g. "top-down" or "side view for a platformer"). ' +
@@ -226,7 +227,7 @@ const GPT_IMAGE_TOOL = {
 
 /**
  * Offered only when the user has configured Tencent HY 3D credentials in
- * GenieEngine's setup panel (checked via /capabilities at list time).
+ * GamifyDesktop's setup panel (checked via /capabilities at list time).
  */
 const HY3D_TOOL = {
   name: 'generate_3d_asset',
@@ -264,7 +265,7 @@ async function handle(request) {
       result: {
         protocolVersion: params?.protocolVersion ?? '2025-03-26',
         capabilities: { tools: {} },
-        serverInfo: { name: 'genieengine', version: '0.1.0' }
+        serverInfo: { name: 'gamifydesktop', version: '0.1.0' }
       }
     })
   } else if (method === 'tools/list') {

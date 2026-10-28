@@ -8,11 +8,13 @@ import { ensureCodexConfig } from './services/codex-config'
 import { stopGame } from './services/game'
 import { stopModelProxy } from './services/model-proxy'
 import { startTestHarness, stopTestHarness } from './services/test-harness'
-import { loadSettings } from './state'
+import { loadSettings, migrateLegacyUserData } from './state'
 import { sendToRenderer, setMainWindow } from './window'
 
 // Keeps the userData (settings) folder stable between dev and packaged runs.
-app.setName('GenieEngine')
+app.setName('GamifyDesktop')
+// Before anything writes to the new folder (Chromium creates its profile there at ready).
+migrateLegacyUserData()
 
 function createWindow(): void {
   const win = new BrowserWindow({
@@ -22,7 +24,7 @@ function createWindow(): void {
     minHeight: 640,
     show: false,
     backgroundColor: '#0e0e13',
-    title: 'GenieEngine',
+    title: 'GamifyDesktop',
     // Frameless-style titlebar on macOS for a modern, engine-like look.
     ...(process.platform === 'darwin' ? { titleBarStyle: 'hiddenInset' as const } : {}),
     webPreferences: {
@@ -78,7 +80,7 @@ app.whenReady().then(async () => {
   loadSettings()
   // Before any chat server starts: Codex reads its config at boot, and an
   // upgrade from the OpenCode-based versions brings its model setup along.
-  await migrateLegacySetup().catch((err) => console.error('[genieengine] model setup migration failed:', err))
+  await migrateLegacySetup().catch((err) => console.error('[gamifydesktop] model setup migration failed:', err))
   await ensureCodexConfig()
   startTestHarness()
   registerIpcHandlers()

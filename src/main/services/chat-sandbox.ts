@@ -45,8 +45,8 @@ function ancestorDirs(p: string): string[] {
  * every process it spawns (shell commands, rg, git, the MCP bridge). Two
  * reasons:
  *
- *  - macOS attributes file access by this process tree to GenieEngine, so a
- *    stray `find ~` from the model used to pop "GenieEngine would like to
+ *  - macOS attributes file access by this process tree to GamifyDesktop, so a
+ *    stray `find ~` from the model used to pop "GamifyDesktop would like to
  *    access your Desktop/Photos/…" TCC dialogs at the user. Seatbelt denies
  *    the access before TCC is ever consulted — no dialog, the command just
  *    gets a permission error the agent can read and route around.
@@ -65,7 +65,7 @@ function ancestorDirs(p: string): string[] {
  * the MCP bridge runs on the app's own executable (Contents/MacOS, loading
  * Contents/Frameworks), and when the app runs from a DMG mounted under
  * /Volumes — a denied root — the bridge died at dyld time, silently taking
- * every genieengine game tool with it. Electron startup also canonicalizes
+ * every gamifydesktop game tool with it. Electron startup also canonicalizes
  * its own bundle path, stat'ing each ancestor directory (/Volumes, the mount
  * root), so those need metadata-level reads too or ICU init crashes before
  * main(). Metadata only — denied directories still can't be listed or read.

@@ -151,7 +151,7 @@ export function TitleBar({
           </button>
         )}
         <span className="brand">
-          <img src={logo} alt="" className="brand-mark-img" /> GenieEngine
+          <img src={logo} alt="" className="brand-mark-img" /> GamifyDesktop
         </span>
         {project && (
           <>

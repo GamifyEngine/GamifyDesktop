@@ -9,7 +9,7 @@ import { git } from './git'
  * the app records the project's state before every turn itself.
  *
  * A snapshot is a git tree object in a private repository under
- * .genieengine/undo/git, used with the project as its work tree: `add -A` +
+ * .gamifydesktop/undo/git, used with the project as its work tree: `add -A` +
  * `write-tree` captures the files, `read-tree --reset -u` puts them back
  * (deleting files the snapshot doesn't have, restoring ones it does). The
  * project's own .gitignore applies, so build output and Godot's cache are
@@ -22,13 +22,47 @@ import { git } from './git'
  * snapshot. The store goes away with the conversation (/clear).
  */
 
-const UNDO_DIR = join('.genieengine', 'undo')
+const UNDO_DIR = join('.gamifydesktop', 'undo')
 
-/** Never captured, whatever the project's .gitignore says (imported projects may have none). */
-const ALWAYS_EXCLUDED = ['.genieengine/', '.godot/', 'exports/', 'override.cfg', 'genieengine_test_agent.gd']
+/**
+ * Never captured, whatever the project's .gitignore says (imported projects
+ * may have none). The last two are the names from before the rename
+ * (GenieEngine, ≤ 0.1.2) — a project that couldn't be migrated may still
+ * have them.
+ */
+const ALWAYS_EXCLUDED = [
+  '.gamifydesktop/',
+  '.godot/',
+  'exports/',
+  'override.cfg',
+  'gamifydesktop_test_agent.gd',
+  '.genieengine/',
+  'genieengine_test_agent.gd'
+]
+
+/** Undo repositories whose exclude list was checked against ALWAYS_EXCLUDED this run. */
+const excludeChecked = new Set<string>()
 
 function gitDir(projectPath: string): string {
   return join(projectPath, UNDO_DIR, 'git')
+}
+
+/**
+ * The exclude list is written when the repository is created; one created
+ * by an older version (moved here with the rest of the project's state on
+ * the rename) still names the old state folder, so it is brought up to date
+ * once per run. Excluding the state folder matters: the undo repository
+ * lives inside it.
+ */
+async function ensureExcludeList(dir: string): Promise<void> {
+  if (excludeChecked.has(dir)) return
+  const wanted = ALWAYS_EXCLUDED.join('\n') + '\n'
+  const path = join(dir, 'info', 'exclude')
+  if ((await readFile(path, 'utf8').catch(() => '')) !== wanted) {
+    await mkdir(join(dir, 'info'), { recursive: true })
+    await writeFile(path, wanted)
+  }
+  excludeChecked.add(dir)
 }
 
 async function snapshotGit(projectPath: string, args: string[]): Promise<string> {
@@ -47,9 +81,10 @@ async function snapshotGit(projectPath: string, args: string[]): Promise<string>
     ]) {
       await git(projectPath, ['--git-dir', dir, 'config', key, value])
     }
-    await mkdir(join(dir, 'info'), { recursive: true })
-    await writeFile(join(dir, 'info', 'exclude'), ALWAYS_EXCLUDED.join('\n') + '\n')
+    // A new repository (first use, or again after /clear) has no exclude list yet.
+    excludeChecked.delete(dir)
   }
+  await ensureExcludeList(dir)
   const { stdout } = await git(projectPath, ['--git-dir', dir, '--work-tree', projectPath, ...args])
   return stdout.trim()
 }

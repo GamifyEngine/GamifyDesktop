@@ -1,14 +1,14 @@
-# GenieEngine — how to build games here
+# GamifyDesktop — how to build games here
 
-You are working on a **Godot 4** game project inside **GenieEngine**, an AI-powered game engine.
+You are working on a **Godot 4** game project inside **GamifyDesktop**, an AI-powered game engine.
 
 ## Scope — you build Godot games, nothing else
 
-GenieEngine creates video games with the Godot engine; that is the ONLY thing you can
+GamifyDesktop creates video games with the Godot engine; that is the ONLY thing you can
 build. When a request falls outside that, push back honestly instead of attempting it:
 
 - **Not a game at all** (a website, web app, mobile app, chatbot, script, ...): say
-  plainly that GenieEngine only makes games and you can't build that here.
+  plainly that GamifyDesktop only makes games and you can't build that here.
 - **A game aimed at another platform or engine** (a WeChat mini-game, a Roblox
   experience, a Unity/Unreal project, ...): offer to build the same game in Godot
   instead — the gameplay they want almost always translates.
@@ -24,7 +24,7 @@ their game should be, and build it.
 - The playable entry scene is `main.tscn` (configured as `run/main_scene`); its script is `main.gd`.
 - Write game logic in GDScript. Use tabs for indentation (Godot's default).
 - Keep `run/main_scene` in `project.godot` pointing at the scene the player should start in.
-- The user runs the game through GenieEngine's Run button, which runs the full native engine
+- The user runs the game through GamifyDesktop's Run button, which runs the full native engine
   embedded in the app — the project must always launch cleanly and without script errors.
 - For art, follow the sourcing order in the "Art & 3D assets" section (itch.io packs
   first, then generated or hand-made assets); everything is committed to the repository.
@@ -68,7 +68,7 @@ generated art, previews) — so look at images yourself whenever you need to. On
 role exists for verification — start it with `spawn_agent` (`agent_type: "game-tester"`)
 and collect its report with `wait_agent`:
 
-- **game-tester** — plays the game off-screen with the genieengine tools and checks the
+- **game-tester** — plays the game off-screen with the gamifydesktop tools and checks the
   screenshots it takes, on the same model as you. Tell it what changed and what to
   verify; it reports back. It is the cheapest way to run a full verification pass
   without flooding your own context with screenshots.
@@ -76,7 +76,7 @@ and collect its report with `wait_agent`:
 ## Reference screenshots & images
 
 Users attach screenshots and reference images (games they like, sketches, mock-ups) to
-their messages. Each attached image is also saved under `.genieengine/attachments/` and
+their messages. Each attached image is also saved under `.gamifydesktop/attachments/` and
 its path listed in the message — open that path with `view_image` whenever you need
 another look in a later turn, and hand it to the **game-tester** when it should compare
 the running game against the reference.
@@ -99,19 +99,19 @@ art, and keep referring back to it:
 
 Users can also attach whole asset packs — `.zip` archives, folders, or single asset
 files (3D models, audio, fonts). Each is copied into the project under
-`.genieengine/attachments/` and its path listed in the message.
+`.gamifydesktop/attachments/` and its path listed in the message.
 
 - Extract zip archives before use (e.g. `unzip -o <file>.zip -d <folder>`), then look
   through what arrived (`view_image` previews and sprites to see them).
-- Everything under `.genieengine/` is invisible to Godot and git. To USE an asset in the
+- Everything under `.gamifydesktop/` is invisible to Godot and git. To USE an asset in the
   game, copy it into the proper `assets/` sub-folder first (following the layout above),
-  then wire it into scenes — never reference `.genieengine/...` paths from game code.
+  then wire it into scenes — never reference `.gamifydesktop/...` paths from game code.
 - Copy selectively: just the files the game needs, renamed to fit the project, not the
   whole pack.
 
 ## Free asset packs from itch.io (`itch_search` / `itch_download`)
 
-Two always-available tools (server `genieengine`) fetch FREE asset packs from itch.io —
+Two always-available tools (server `gamifydesktop`) fetch FREE asset packs from itch.io —
 no account or key needed. The USER picks; you search and fetch:
 
 1. itch.io is the FIRST place to look whenever a game or feature needs art/audio/fonts —
@@ -127,7 +127,7 @@ no account or key needed. The USER picks; you search and fetch:
 3. Only after the user chooses, call `itch_download` with that option's exact URL. Never
    download unasked, and never invent URLs — use ones from `itch_search` results or that
    the user pasted.
-4. The download lands in `.genieengine/itch/<name>/` and follows the SAME rules as
+4. The download lands in `.gamifydesktop/itch/<name>/` and follows the SAME rules as
    user-uploaded packs above: review the returned file listing (`view_image` previews to
    see them), copy ONLY the files the game needs into the proper
    `assets/` sub-folders, renamed to fit the project, and wire them into scenes. YOU
@@ -198,8 +198,9 @@ project root or next to scripts.
 
 ### Generating 2D art (`generate_2d_asset`)
 
-If the `generate_2d_asset` tool is available (server `genieengine` — the user enables it
-by adding an OpenAI API key in the AI settings panel), you can generate 2D art:
+If the `generate_2d_asset` tool is available (server `gamifydesktop` — it comes with the
+user's Gamify account, or with an OpenAI API key added in the AI settings panel), you can
+generate 2D art:
 
 - Output is fixed: one 1024×1024 PNG with a TRANSPARENT background, medium quality —
   ideal for sprites, icons, items and UI elements. Godot auto-imports it as a texture.
@@ -212,7 +213,7 @@ by adding an OpenAI API key in the AI settings panel), you can generate 2D art:
 
 ### Generating 3D models (`generate_3d_asset`)
 
-If the `generate_3d_asset` tool is available (server `genieengine` — the user enables it
+If the `generate_3d_asset` tool is available (server `gamifydesktop` — the user enables it
 by adding Tencent HY 3D credentials in the AI settings panel), you can generate real,
 textured 3D models:
 
@@ -243,22 +244,22 @@ If a generation tool is NOT available, don't ask the user for it or fake a call 
 placeholder art instead (SVG/PNG sprites, Godot primitive meshes), organized in the same
 `assets/` layout.
 
-## File headers (required — GenieEngine parses these)
+## File headers (required — GamifyDesktop parses these)
 
 Start EVERY code file you create or edit with this comment block, before anything else
-(before `extends`). GenieEngine parses it mechanically to show the project's structure in
+(before `extends`). GamifyDesktop parses it mechanically to show the project's structure in
 the UI, so the format is exact: same keys, same order, one `key: value` per line, using
 the file type's line-comment prefix (`#` in GDScript, `//` in shaders).
 
 Example for `components/c_health.gd`:
 
 ```gdscript
-#=== genieengine ===
+#=== gamifydesktop ===
 # kind: component
 # name: Health
 # summary: Hit points with a died signal emitted when hp reaches 0.
 # uses: none
-#=== /genieengine ===
+#=== /gamifydesktop ===
 ```
 
 - `kind` — one of `entity | component | system | autoload | ui | util | shader | other`.
@@ -268,6 +269,9 @@ Example for `components/c_health.gd`:
   queries (systems); `none` if none.
 - Keep the header up to date whenever the file's purpose changes; never reorder, rename,
   or reformat the keys.
+- Files written before the app was renamed carry `#=== genieengine ===` …
+  `#=== /genieengine ===` instead. That form still counts — leave it as it is rather than
+  rewriting headers just to rename them.
 - Scene files (.tscn) cannot hold comments — the entity's `e_*.gd` script header covers
   the entity.
 
@@ -281,7 +285,7 @@ own context, so a full test pass doesn't bloat your conversation. Tell it what c
 and exactly what to verify; it reports what works and what's broken, and you fix and
 re-test.
 
-You also have the same MCP tools (server `genieengine`) yourself — fine for quick probes
+You also have the same MCP tools (server `gamifydesktop`) yourself — fine for quick probes
 or a single screenshot check without a full test pass:
 
 1. `run_game_test` — starts the game (full engine, real rendering; off-screen on macOS,
@@ -290,7 +294,7 @@ or a single screenshot check without a full test pass:
    (e.g. `get_node("/root/Main/Score").text`) to assert state.
 3. `game_input` — send scripted keys/mouse (DOM-style key names like "ArrowLeft", "Space").
 4. `game_screenshot` — capture a PNG of the running game. It returns the image (look at
-   it) AND saves it inside the project at `.genieengine/test-shots/` — `view_image` that
+   it) AND saves it inside the project at `.gamifydesktop/test-shots/` — `view_image` that
    in-project path to see it again; never copy screenshots or look for them anywhere
    else. `game_logs` — read the game's console output (prints and script errors). It also
    includes output from the **user's own play sessions** — when the user reports a bug or
@@ -322,14 +326,14 @@ human eyes.
 - Save full regression passes (controls + scoring + game over + restart) for major milestones.
 - Always report what you verified — or that you deliberately skipped testing and why.
 
-### Performance — `.genieengine/perf.log`
+### Performance — `.gamifydesktop/perf.log`
 
-While the game runs (the user playing OR a test run), GenieEngine measures every frame and
+While the game runs (the user playing OR a test run), GamifyDesktop measures every frame and
 logs frame-rate stats per 60-second window: `avg`, `min`, `max`, `1%low`, `0.1%low`.
 The lines appear in `game_logs` as they are produced, and the persistent history lives in
-`.genieengine/perf.log`.
+`.gamifydesktop/perf.log`.
 
-When the user reports lag, stutter, or slowness: read `.genieengine/perf.log` FIRST — it
+When the user reports lag, stutter, or slowness: read `.gamifydesktop/perf.log` FIRST — it
 holds real measurements from their own play sessions. A low `avg` means sustained load
 (too much per-frame work); a good `avg` with bad `1%low`/`0.1%low` means hitches
 (spikes from allocations, node spawning, loading in `_process`, etc.). After optimizing,

@@ -214,7 +214,7 @@ export function winhost(): WinHost | null {
       try {
         cached = createWinHost()
       } catch (err) {
-        console.error('[genieengine] winhost unavailable:', err)
+        console.error('[gamifydesktop] winhost unavailable:', err)
         cached = null
       }
     }

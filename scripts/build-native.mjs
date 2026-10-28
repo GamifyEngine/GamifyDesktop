@@ -1,7 +1,7 @@
 #!/usr/bin/env node
 /**
  * Builds the layerhost native addon (macOS only — it hosts the embedded
- * game's CoreAnimation layer inside the GenieEngine window). Tolerant of
+ * game's CoreAnimation layer inside the GamifyDesktop window). Tolerant of
  * failure so `npm install` still succeeds on machines without a compiler;
  * native embedded play mode simply reports itself unavailable then.
  */

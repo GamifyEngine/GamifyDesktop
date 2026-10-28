@@ -4,7 +4,7 @@ import type { EcsNode } from '../../../shared/types'
 /**
  * ECS viewer: entities / components / systems as three linked columns, with
  * edges drawn from each entity and system to the components it `uses` (per
- * the parsed `#=== genieengine ===` file headers). Hover previews a node's
+ * the parsed `#=== gamifydesktop ===` file headers). Hover previews a node's
  * connections and header; click pins it. Files whose kind is outside the ECS
  * trio appear in a strip below the graph.
  */
@@ -160,7 +160,7 @@ export function EcsPanel(): React.JSX.Element {
           <h2>No ECS files yet</h2>
           <p className="muted">
             This view maps your game&apos;s entities, components and systems from the
-            <code> #=== genieengine ===</code> headers the assistant puts at the top of every code
+            <code> #=== gamifydesktop ===</code> headers the assistant puts at the top of every code
             file. Ask it to build a feature — or to refactor existing code to the ECS structure —
             and the network will appear here.
           </p>

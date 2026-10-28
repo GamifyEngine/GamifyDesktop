@@ -17,7 +17,8 @@ import {
   stopGame,
   type TestInputAction
 } from './game'
-import { generateImageAsset, isGptImageConfigured } from './gptimage'
+import { imageGenerationRoute } from './chat-setup'
+import { generateImageAsset } from './gptimage'
 import { generateAsset, isHy3dConfigured, type GenerateAssetRequest } from './hy3d'
 import { downloadItchAsset, searchItchAssets } from './itch'
 import type { AssetPreview } from '../../shared/types'
@@ -36,7 +37,7 @@ let endpoint: { port: number; token: string } | null = null
 /**
  * This instance's harness address. Injected into the env of every Codex
  * server we spawn so the bridge always reaches THIS app instance. harness.json
- * can't provide that guarantee: it's one file shared by every GenieEngine
+ * can't provide that guarantee: it's one file shared by every GamifyDesktop
  * instance (dev + packaged can run side by side), so it holds whichever
  * instance registered last — the file is only a fallback for agent sessions
  * that weren't launched by the app.
@@ -53,7 +54,7 @@ function harnessFilePath(): string {
 const KEEP_SHOTS = 12
 
 /**
- * Screenshots live INSIDE the project (.genieengine/test-shots/, gitignored and
+ * Screenshots live INSIDE the project (.gamifydesktop/test-shots/, gitignored and
  * .gdignore'd via ensureProjectStateDir). They used to go to the app's
  * userData dir, and handing that ~/Library path to the model lured it into
  * reading/copying outside the project — which the sandbox rejects (see
@@ -133,7 +134,7 @@ async function dispatchTool(name: string, args: Record<string, unknown>): Promis
   switch (name) {
     case 'run_game_test': {
       const project = getCurrentProject()
-      if (!project) return { ok: false, text: 'No project is open in GenieEngine.' }
+      if (!project) return { ok: false, text: 'No project is open in GamifyDesktop.' }
       await startGameTest(project.path)
       // Windowed fallback platforms have no off-screen embedding — say where
       // the game actually went so the model reports it accurately.
@@ -155,7 +156,7 @@ async function dispatchTool(name: string, args: Record<string, unknown>): Promis
     }
     case 'game_screenshot': {
       const project = getCurrentProject()
-      if (!project) return { ok: false, text: 'No project is open in GenieEngine.' }
+      if (!project) return { ok: false, text: 'No project is open in GamifyDesktop.' }
       const dir = join(await ensureProjectStateDir(project.path), 'test-shots')
       mkdirSync(dir, { recursive: true })
       const file = `shot-${Date.now()}.png`
@@ -171,7 +172,7 @@ async function dispatchTool(name: string, args: Record<string, unknown>): Promis
       return {
         ok: true,
         text:
-          `Screenshot saved inside the project at .genieengine/test-shots/${file}. ` +
+          `Screenshot saved inside the project at .gamifydesktop/test-shots/${file}. ` +
           'Look at the attached image now; read that path to see it again later — ' +
           'never copy screenshots elsewhere.',
         imageBase64: shot.base64,
@@ -195,7 +196,7 @@ async function dispatchTool(name: string, args: Record<string, unknown>): Promis
     }
     case 'generate_3d_asset': {
       const project = getCurrentProject()
-      if (!project) return { ok: false, text: 'No project is open in GenieEngine.' }
+      if (!project) return { ok: false, text: 'No project is open in GamifyDesktop.' }
       const result = await generateAsset(project.path, {
         prompt: typeof args.prompt === 'string' ? args.prompt : undefined,
         imagePath: typeof args.image_path === 'string' ? args.image_path : undefined,
@@ -225,12 +226,16 @@ async function dispatchTool(name: string, args: Record<string, unknown>): Promis
     }
     case 'generate_2d_asset': {
       const project = getCurrentProject()
-      if (!project) return { ok: false, text: 'No project is open in GenieEngine.' }
-      const result = await generateImageAsset(project.path, {
-        prompt: String(args.prompt ?? ''),
-        folder: String(args.folder ?? ''),
-        name: String(args.name ?? '')
-      })
+      if (!project) return { ok: false, text: 'No project is open in GamifyDesktop.' }
+      const result = await generateImageAsset(
+        project.path,
+        {
+          prompt: String(args.prompt ?? ''),
+          folder: String(args.folder ?? ''),
+          name: String(args.name ?? '')
+        },
+        await imageGenerationRoute()
+      )
       sendToRenderer('chat:files-changed')
       pushAssetPreview(result.previewBase64, result.previewMime, String(args.name ?? 'asset'), result.files, '2d')
       return {
@@ -250,9 +255,9 @@ async function dispatchTool(name: string, args: Record<string, unknown>): Promis
     }
     case 'itch_download': {
       const project = getCurrentProject()
-      if (!project) return { ok: false, text: 'No project is open in GenieEngine.' }
+      if (!project) return { ok: false, text: 'No project is open in GamifyDesktop.' }
       const text = await downloadItchAsset(project.path, String(args.url ?? ''))
-      // Staged under .genieengine/ (hidden from the sidebar today), but keep
+      // Staged under .gamifydesktop/ (hidden from the sidebar today), but keep
       // the post-write convention the other file-writing tools follow.
       sendToRenderer('chat:files-changed')
       return { ok: true, text }
@@ -295,14 +300,14 @@ export function startTestHarness(): void {
       res.writeHead(status, { 'content-type': 'application/json' })
       res.end(JSON.stringify(payload))
     }
-    if (!tokenMatches(req.headers['x-genieengine-token'], token)) {
+    if (!tokenMatches(req.headers['x-gamifydesktop-token'], token)) {
       respond(403, { ok: false, text: 'invalid token' })
       return
     }
     // Which optional tools are available — the MCP bridge checks this at
     // startup so unconfigured tools are never offered to the model.
     if (req.method === 'GET' && req.url === '/capabilities') {
-      respond(200, { hy3d: await isHy3dConfigured(), gptImage: await isGptImageConfigured() })
+      respond(200, { hy3d: await isHy3dConfigured(), gptImage: (await imageGenerationRoute()) !== null })
       return
     }
     if (req.method !== 'POST' || req.url !== '/tool') {
@@ -338,7 +343,7 @@ export function stopTestHarness(): void {
   server?.close()
   server = null
   // Only remove harness.json if it still holds OUR registration. Another
-  // GenieEngine instance may have overwritten it since we launched (the file is
+  // GamifyDesktop instance may have overwritten it since we launched (the file is
   // shared), and deleting theirs would strand that still-running instance —
   // this exact race broke the packaged app while a dev instance quit.
   try {

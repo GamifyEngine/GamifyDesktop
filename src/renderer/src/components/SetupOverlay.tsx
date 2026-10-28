@@ -1,28 +1,40 @@
 import { useState } from 'react'
 import type {
   ChatModelTier,
+  ChatSource,
   ModelSlotRequest,
   ModelSlotStatus,
   ReasoningEffort,
   SetupStatus,
   ThinkingMode
 } from '../../../shared/types'
-import { SparkIcon, XIcon } from './Icons'
+import { ExternalIcon, SparkIcon, XIcon } from './Icons'
 
 interface Props {
   status: SetupStatus
-  onConfigured: (status: SetupStatus) => void
+  /** A new status after a save, sign-in or sign-out. */
+  onStatusChange: (status: SetupStatus) => void
   /** Present when the panel was opened from the gear (already configured) — shows a close button. */
   onClose?: () => void
 }
 
-type SetupTab = 'agent' | '2d' | '3d'
+type SetupTab = ChatSource | '2d' | '3d'
 
+/**
+ * The first two tabs are the two ways to run the assistant — picking one of
+ * them (the radio dot) is what Save applies; the other two are optional
+ * extras that work with either.
+ */
 const TABS: { id: SetupTab; label: string }[] = [
-  { id: 'agent', label: 'Models' },
-  { id: '2d', label: '2D Asset Generation (Optional)' },
-  { id: '3d', label: '3D Asset Generation (Optional)' }
+  { id: 'gamify', label: 'Gamify Account' },
+  { id: 'custom', label: 'Your Own Models' },
+  { id: '2d', label: '2D Assets (Optional)' },
+  { id: '3d', label: '3D Assets (Optional)' }
 ]
+
+const isSource = (tab: SetupTab): tab is ChatSource => tab === 'gamify' || tab === 'custom'
+
+const creditsFormat = new Intl.NumberFormat(undefined, { maximumFractionDigits: 0 })
 
 /** Mirrors the main process default — used to tell "same endpoint" from "own endpoint". */
 const OPENROUTER_ENDPOINT = 'https://openrouter.ai/api/v1'
@@ -102,8 +114,8 @@ function ConfiguredButton({ onClick }: { onClick: () => void }): React.JSX.Eleme
 }
 
 /**
- * One model's connection settings: endpoint + model + API key. The Models tab
- * shows two — the Medium and Large chat models.
+ * One model's connection settings: endpoint + model + API key. The own-models
+ * tab shows two — the Medium and Large chat models.
  */
 function ModelSection(props: {
   title: string
@@ -220,14 +232,97 @@ function ModelSection(props: {
 }
 
 /**
- * AI provider setup, shown over a darkened chat until the assistant is
- * connected (and reopenable later from the sidebar gear). Three tabs:
- * the models (any OpenAI Responses-API endpoints — the image-capable Medium
- * and Large chat models), optional 2D asset generation (OpenAI gpt-image-1.5)
- * and optional 3D asset generation (Tencent HY 3D).
+ * The Gamify Account tab: sign in through the browser (trygamify.io) and the
+ * assistant runs on the account — no keys. Three states: signed out, waiting
+ * for the browser to come back, signed in (who, and the credits left).
  */
-export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JSX.Element {
-  const [tab, setTab] = useState<SetupTab>('agent')
+function GamifySection({
+  status,
+  waiting,
+  onSignIn,
+  onCancel,
+  onSignOut
+}: {
+  status: SetupStatus
+  waiting: boolean
+  onSignIn: () => void
+  onCancel: () => void
+  onSignOut: () => void
+}): React.JSX.Element {
+  const { gamify } = status
+  const host = new URL(gamify.site).host
+  const user = gamify.user
+
+  if (gamify.signedIn) {
+    return (
+      <div className="setup-section">
+        <div className="gamify-account">
+          <span className="gamify-avatar">{(user?.displayName.replace(/^@/, '') || 'G').slice(0, 1).toUpperCase()}</span>
+          <div className="gamify-account-who">
+            <span className="gamify-account-name">{user?.displayName ?? `Signed in to ${host}`}</span>
+            <span className="setup-hint">
+              {user
+                ? user.unlimitedCredits
+                  ? 'Unlimited credits'
+                  : `${creditsFormat.format(user.credits)} credits left`
+                : 'Couldn’t load the account right now — it still works.'}
+            </span>
+          </div>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onSignOut}>
+            Sign out
+          </button>
+        </div>
+        <span className="setup-hint">
+          The assistant’s models{gamify.imageGeneration ? ' and its 2D art' : ''} run on {host}, paid for with your
+          account’s credits — no API keys needed.
+        </span>
+        <button type="button" className="btn btn-ghost" onClick={() => void window.api.openGamifyAccountPage()}>
+          Manage your account on {host} <ExternalIcon size={11} />
+        </button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="setup-section">
+      <span className="setup-hint">
+        Use your Gamify account and skip the API keys: the assistant runs on models Gamify picks and runs for you,
+        with 2D art generation included, all paid for with your account’s credits. New accounts start with free
+        credits.
+      </span>
+      {waiting ? (
+        <div className="gamify-waiting">
+          <span>Finish signing in in your browser…</span>
+          <button type="button" className="btn btn-ghost btn-sm" onClick={onCancel}>
+            Cancel
+          </button>
+        </div>
+      ) : (
+        <button type="button" className="btn btn-primary btn-lg" onClick={onSignIn}>
+          Sign in with Gamify
+        </button>
+      )}
+      <span className="setup-hint">
+        Opens {host} in your browser, where you sign in with Apple. GamifyDesktop signs you in by itself once
+        you’re done.
+      </span>
+    </div>
+  )
+}
+
+/**
+ * AI provider setup, shown over a darkened chat until the assistant is
+ * connected (and reopenable later from the gear). The assistant runs on one
+ * of two sources, each a tab: the user's Gamify account (sign in through the
+ * browser) or their own models (any OpenAI Responses-API endpoints — the
+ * image-capable Medium and Large chat models). Two more tabs hold optional
+ * asset generation: 2D (OpenAI gpt-image-1.5 with your own key — included
+ * with a Gamify account) and 3D (Tencent HY 3D).
+ */
+export function SetupOverlay({ status, onStatusChange, onClose }: Props): React.JSX.Element {
+  const [tab, setTab] = useState<SetupTab>(status.source)
+  // The source Save applies: whichever of the first two tabs was picked last.
+  const [source, setSource] = useState<ChatSource>(status.source)
   const [slots, setSlots] = useState<Record<SlotId, SlotState>>(() => ({
     medium: initSlot(status.medium),
     large: initSlot(status.large)
@@ -236,10 +331,17 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
   const [tencentKey, setTencentKey] = useState('')
   const [openaiKey, setOpenaiKey] = useState('')
   const [busy, setBusy] = useState(false)
+  const [signingIn, setSigningIn] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
   const [tencentRevealed, setTencentRevealed] = useState(!status.hy3dConfigured)
   const [openaiKeyRevealed, setOpenaiKeyRevealed] = useState(!status.gptImageConfigured)
+
+  const pickTab = (id: SetupTab): void => {
+    setTab(id)
+    if (isSource(id)) setSource(id)
+    setError(null)
+  }
 
   const updateSlot = (id: SlotId, patch: Partial<SlotState>): void =>
     setSlots((prev) => ({ ...prev, [id]: { ...prev[id], ...patch } }))
@@ -274,14 +376,42 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
     setTab(where)
   }
 
+  // Signing in also makes the account the assistant's source (main process),
+  // so a first-run setup is done the moment the browser comes back.
+  const signIn = async (): Promise<void> => {
+    setSigningIn(true)
+    setError(null)
+    const result = await window.api.gamifySignIn()
+    setSigningIn(false)
+    if (!result.ok) {
+      if (!/cancelled|restarted/i.test(result.error)) setError(result.error)
+      return
+    }
+    setSource('gamify')
+    onStatusChange(result.data)
+  }
+
+  const signOut = async (): Promise<void> => {
+    setError(null)
+    const result = await window.api.gamifySignOut()
+    if (result.ok) onStatusChange(result.data)
+    else setError(result.error)
+  }
+
   const save = async (): Promise<void> => {
-    for (const { id, title } of MODEL_SLOTS) {
-      if (!covered(id)) {
-        fail(
-          `"${title}" has no usable API key — enter one, or point its endpoint at another section's endpoint to share that key.`,
-          'agent'
-        )
-        return
+    if (source === 'gamify' && !status.gamify.signedIn) {
+      fail('Sign in to your Gamify account first — or switch to your own models.', 'gamify')
+      return
+    }
+    if (source === 'custom') {
+      for (const { id, title } of MODEL_SLOTS) {
+        if (!covered(id)) {
+          fail(
+            `"${title}" has no usable API key — enter one, or point its endpoint at another section's endpoint to share that key.`,
+            'custom'
+          )
+          return
+        }
       }
     }
     if (!!tencentId.trim() !== !!tencentKey.trim()) {
@@ -298,6 +428,7 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
       effort: slots[id].effort
     })
     const result = await window.api.saveSetup({
+      source,
       medium: slotRequest('medium'),
       large: slotRequest('large'),
       tencentSecretId: tencentId,
@@ -309,14 +440,17 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
       setError(result.error)
       return
     }
-    const broken = MODEL_SLOTS.find(({ id }) => !result.data[id].configured)
+    const broken = source === 'custom' ? MODEL_SLOTS.find(({ id }) => !result.data[id].configured) : undefined
     if (broken) {
       setError(`The "${broken.title}" endpoint still has no usable credential — double-check its API key.`)
     } else {
-      onConfigured(result.data)
+      onStatusChange(result.data)
       onClose?.()
     }
   }
+
+  // Signed out on the Gamify tab, the sign-in button is the way forward.
+  const showSave = !(tab === 'gamify' && !status.gamify.signedIn)
 
   return (
     <div className="setup-overlay">
@@ -333,9 +467,8 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
           <div>
             <h2 className="setup-title">{status.configured ? 'AI settings' : 'Connect your AI assistant'}</h2>
             <p className="setup-sub">
-              GenieEngine's assistant is powered by OpenAI's Codex agent, running on Medium and Large
-              chat models you can switch between per message. Both must accept image input — the
-              assistant reads the images you attach and play-tests your game with screenshots itself.
+              GamifyDesktop's assistant is powered by OpenAI's Codex agent. Run it on your Gamify account — sign
+              in and go — or on your own models from any OpenAI Responses API endpoint, such as OpenRouter.
             </p>
           </div>
         </div>
@@ -348,15 +481,36 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
               role="tab"
               aria-selected={tab === id}
               className={`setup-tab${tab === id ? ' active' : ''}`}
-              onClick={() => setTab(id)}
+              onClick={() => pickTab(id)}
             >
+              {isSource(id) && (
+                <span
+                  className={`setup-tab-radio${source === id ? ' on' : ''}`}
+                  title={source === id ? 'The assistant runs on this' : undefined}
+                />
+              )}
               {label}
             </button>
           ))}
         </div>
 
-        {tab === 'agent' && (
+        {tab === 'gamify' && (
+          <GamifySection
+            status={status}
+            waiting={signingIn || status.gamify.signingIn}
+            onSignIn={() => void signIn()}
+            onCancel={() => void window.api.gamifyCancelSignIn()}
+            onSignOut={() => void signOut()}
+          />
+        )}
+
+        {tab === 'custom' && (
           <>
+            <span className="setup-hint">
+              The assistant runs on Medium and Large chat models you can switch between per message. Both must
+              accept image input — the assistant reads the images you attach and play-tests your game with
+              screenshots itself.
+            </span>
             {MODEL_SLOTS.map(({ id, title, hint, modelPlaceholder }) => (
               <ModelSection
                 key={id}
@@ -376,7 +530,7 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
                 keyPlaceholder={keyPlaceholder(id)}
                 keyHint={
                   id === 'medium'
-                    ? 'Stored locally by GenieEngine and only ever sent to this endpoint — never written into your game, and the assistant itself can’t read it.'
+                    ? 'Stored locally by GamifyDesktop and only ever sent to this endpoint — never written into your game, and the assistant itself can’t read it.'
                     : undefined
                 }
                 keyHidden={status[id].configured && !slots[id].keyRevealed}
@@ -391,9 +545,9 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
         {tab === '2d' && (
           <>
             <span className="setup-hint">
-              Add an OpenAI API key to let the assistant generate 2D art — sprites, icons, UI — as
-              transparent 1024×1024 PNGs saved into your game's assets folder. Only OpenAI's
-              gpt-image-1.5 model is supported right now.
+              {source === 'gamify'
+                ? 'Included with your Gamify account: the assistant generates 2D art — sprites, icons, UI — as transparent 1024×1024 PNGs saved into your game’s assets folder, charged to your credits. The OpenAI API key below is for your own models.'
+                : 'Add an OpenAI API key to let the assistant generate 2D art — sprites, icons, UI — as transparent 1024×1024 PNGs saved into your game’s assets folder. Only OpenAI’s gpt-image-1.5 model is supported right now.'}
             </span>
 
             <div className="setup-field">
@@ -465,9 +619,11 @@ export function SetupOverlay({ status, onConfigured, onClose }: Props): React.JS
 
         {error && <div className="error-banner small">{error}</div>}
 
-        <button className="btn btn-primary setup-connect" disabled={busy} onClick={() => void save()}>
-          {busy ? 'Saving…' : status.configured ? 'Save' : 'Connect'}
-        </button>
+        {showSave && (
+          <button className="btn btn-primary setup-connect" disabled={busy} onClick={() => void save()}>
+            {busy ? 'Saving…' : status.configured ? 'Save' : 'Connect'}
+          </button>
+        )}
       </div>
     </div>
   )

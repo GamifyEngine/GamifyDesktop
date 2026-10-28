@@ -1,6 +1,6 @@
 {
-  "name": "genieengine",
-  "productName": "GenieEngine",
+  "name": "gamifydesktop",
+  "productName": "GamifyDesktop",
   "version": "0.1.2",
   "description": "AI-powered game engine — build games by chatting with an AI, powered by Godot under the hood.",
   "main": "out/main/index.js",
@@ -39,8 +39,8 @@
     "vite": "^6.1.0"
   },
   "build": {
-    "appId": "ai.genieengine.desktop",
-    "productName": "GenieEngine",
+    "appId": "io.trygamify.desktop",
+    "productName": "GamifyDesktop",
     "directories": {
       "output": "dist"
     },

@@ -7,6 +7,7 @@ import type {
   ChatModelTier,
   ChatPartUpdate,
   ChatQuestionRequest,
+  ChatSource,
   ChatToolStatus
 } from '../../../shared/types'
 import { FileIcon, FolderIcon, PlusIcon, SearchIcon, SendIcon, SparkIcon, StopIcon, TerminalIcon, XIcon } from './Icons'
@@ -49,7 +50,7 @@ const ATTACH_EXTENSIONS = ['.txt', '.md', '.json', '.gd', '.tscn', '.cfg', '.csv
 
 // Asset uploads: archives and 2D/3D asset files too big or too binary to ride
 // the message as data URLs. They attach by disk path — on send the main
-// process copies them into the project's .genieengine/attachments/ and points
+// process copies them into the project's .gamifydesktop/attachments/ and points
 // the assistant there (see saveChatUploads). Dropped/picked folders always
 // take this route. Checked against the same 512 MB cap the main process
 // enforces; folders can only be measured there, so theirs waits until send.
@@ -148,6 +149,8 @@ function readFileAsDataUrl(file: File): Promise<string> {
 interface Props {
   projectPath: string
   assistantAvailable: boolean
+  /** On a Gamify account the backend picks the model, so the Medium/Large picker is hidden. */
+  chatSource: ChatSource
   onAssistantDone: () => void
 }
 
@@ -162,7 +165,7 @@ const SUGGESTIONS = [
  * tiers continue the same conversation — the model named on each message is
  * the only thing that changes — so switching mid-chat loses nothing.
  */
-const MODEL_TIER_KEY = 'genieengine:chatModelTier'
+const MODEL_TIER_KEY = 'gamifydesktop:chatModelTier'
 
 const MODEL_TIERS: { id: ChatModelTier; label: string }[] = [
   { id: 'medium', label: 'Medium' },
@@ -192,8 +195,14 @@ function slashQueryOf(input: string): string | null {
   return rest.toLowerCase()
 }
 
+/**
+ * Transcripts saved by versions that ran on OpenCode (≤ 0.1.1, when the app
+ * was called GenieEngine) name game tools with the MCP server as a prefix.
+ */
+const LEGACY_TOOL_PREFIX = /^genieengine_/
+
 function toolIcon(name: string): React.JSX.Element {
-  const base = name.replace(/^genieengine_/, '')
+  const base = name.replace(LEGACY_TOOL_PREFIX, '')
   if (base === 'bash') return <TerminalIcon size={11} />
   if (base === 'grep' || base === 'list' || base === 'websearch' || base === 'itch_search') return <SearchIcon size={11} />
   if (base === 'read' || base === 'write' || base === 'edit' || base === 'view_image') return <FileIcon size={11} />
@@ -208,7 +217,7 @@ function toolLabel(tool: { name: string; title?: string; agent?: string }): stri
     title = title.split('/').filter(Boolean).slice(-2).join('/')
   }
   if (title.length > 40) title = title.slice(0, 39) + '…'
-  const name = tool.name.replace(/^genieengine_/, '')
+  const name = tool.name.replace(LEGACY_TOOL_PREFIX, '')
   const label = title ? `${name} · ${title}` : name
   // Subagent calls carry their agent so delegated work reads as such.
   return tool.agent ? `${tool.agent} → ${label}` : label
@@ -451,7 +460,7 @@ function QuestionCard({
   )
 }
 
-export function ChatPanel({ projectPath, assistantAvailable, onAssistantDone }: Props): React.JSX.Element {
+export function ChatPanel({ projectPath, assistantAvailable, chatSource, onAssistantDone }: Props): React.JSX.Element {
   const [messages, setMessages] = useState<ChatMessage[]>([])
   const [input, setInput] = useState('')
   const [streaming, setStreaming] = useState(false)
@@ -583,7 +592,7 @@ export function ChatPanel({ projectPath, assistantAvailable, onAssistantDone }: 
     for (const { file, dir } of incoming) {
       // Folders and asset files (zips, models, audio…) attach by path — only
       // their location crosses to the main process, which copies them into
-      // .genieengine/attachments/ when the message is sent.
+      // .gamifydesktop/attachments/ when the message is sent.
       if (dir || isUpload(file)) {
         const path = window.api.pathForFile(file)
         if (!path) {
@@ -918,7 +927,7 @@ export function ChatPanel({ projectPath, assistantAvailable, onAssistantDone }: 
           <div className="chat-empty">
             {!assistantAvailable && (
               <div className="notice">
-                The bundled Codex assistant is missing. Reinstall GenieEngine, or run{' '}
+                The bundled Codex assistant is missing. Reinstall GamifyDesktop, or run{' '}
                 <code>npm run setup</code> in development.
               </div>
             )}
@@ -1158,19 +1167,21 @@ export function ChatPanel({ projectPath, assistantAvailable, onAssistantDone }: 
                   <FolderIcon size={13} />
                 </button>
               </div>
-              <select
-                className="model-select"
-                value={modelTier}
-                title="Which chat model answers — Medium for everyday work, Large for tough tasks that need extra juice (may cost more). The conversation continues either way."
-                aria-label="Chat model"
-                onChange={(e) => pickModelTier(e.target.value === 'large' ? 'large' : 'medium')}
-              >
-                {MODEL_TIERS.map(({ id, label }) => (
-                  <option key={id} value={id}>
-                    {label}
-                  </option>
-                ))}
-              </select>
+              {chatSource === 'custom' && (
+                <select
+                  className="model-select"
+                  value={modelTier}
+                  title="Which chat model answers — Medium for everyday work, Large for tough tasks that need extra juice (may cost more). The conversation continues either way."
+                  aria-label="Chat model"
+                  onChange={(e) => pickModelTier(e.target.value === 'large' ? 'large' : 'medium')}
+                >
+                  {MODEL_TIERS.map(({ id, label }) => (
+                    <option key={id} value={id}>
+                      {label}
+                    </option>
+                  ))}
+                </select>
+              )}
             </div>
             {streaming ? (
               <button className="send-btn stop" title="Stop" onClick={() => void window.api.chatCancel()}>

@@ -8,7 +8,7 @@ import { ensureProjectStateDir } from './chat-history'
  * (`ogperf:frames`); game.ts feeds them in here. Two consumers:
  *
  *  - the FPS counter in the editor's game view (1 Hz updates), and
- *  - .genieengine/perf.log in the project: one stats line per 60-second
+ *  - .gamifydesktop/perf.log in the project: one stats line per 60-second
  *    window (min / max / avg / 1% low / 0.1% low), written so the AI
  *    assistant can read real frame-rate history — including the user's own
  *    play sessions — when diagnosing performance issues.
@@ -38,7 +38,7 @@ const MAX_WINDOW_FRAMES = 200_000
 const LOG_MAX_LINES = 500
 
 const LOG_HEADER =
-  '# GenieEngine frame-rate log — one line per 60s of gameplay (all values in FPS).\n' +
+  '# GamifyDesktop frame-rate log — one line per 60s of gameplay (all values in FPS).\n' +
   '# 1%low / 0.1%low = FPS equivalent of the average frame time of the slowest 1% / 0.1% of frames.\n'
 
 let deltas: number[] = []
@@ -110,7 +110,7 @@ export function formatPerfStats(stats: PerfStats): string {
 }
 
 /**
- * Append a stats line to the project's .genieengine/perf.log, keeping the file
+ * Append a stats line to the project's .gamifydesktop/perf.log, keeping the file
  * bounded. Best-effort: perf logging must never break a game run.
  */
 export async function appendPerfLog(projectPath: string, mode: string, stats: PerfStats): Promise<void> {

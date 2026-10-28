@@ -1,8 +1,8 @@
-import type { GenieEngineApi } from '../shared/types'
+import type { GamifyDesktopApi } from '../shared/types'
 
 declare global {
   interface Window {
-    api: GenieEngineApi
+    api: GamifyDesktopApi
   }
 }
 

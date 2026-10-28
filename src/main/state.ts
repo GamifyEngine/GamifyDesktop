@@ -1,7 +1,7 @@
 import { app } from 'electron'
-import { existsSync, mkdirSync, readFileSync, writeFileSync } from 'node:fs'
+import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, writeFileSync } from 'node:fs'
 import { dirname, join } from 'node:path'
-import type { ChatModelTier, ReasoningEffort, ThinkingMode, ProjectInfo } from '../shared/types'
+import type { ChatModelTier, ChatSource, ReasoningEffort, ThinkingMode, ProjectInfo } from '../shared/types'
 
 /**
  * One chat model slot's non-secret settings. Its API key lives in its own
@@ -33,6 +33,8 @@ interface SettingsFile {
   advancedMode?: boolean
   chatSlots?: Partial<Record<ChatModelTier, ChatSlotSettings>>
   chatModels?: LegacyChatModelRefs
+  /** Gamify account or own models — unset until the user first picks (see chatSource in chat-setup.ts). */
+  chatSource?: ChatSource
 }
 
 let settings: SettingsFile = { recentProjects: [] }
@@ -40,6 +42,31 @@ let currentProject: ProjectInfo | null = null
 
 function settingsPath(): string {
   return join(app.getPath('userData'), 'settings.json')
+}
+
+/**
+ * Versions ≤ 0.1.2 were called GenieEngine and kept everything — settings,
+ * API keys, Codex conversations — in <appData>/GenieEngine. On the first
+ * launch after the rename that folder becomes this app's userData: renamed
+ * whole when the new folder doesn't exist yet, otherwise entry by entry
+ * without overwriting anything. Best effort — on failure the app simply
+ * starts fresh.
+ */
+export function migrateLegacyUserData(): void {
+  const target = app.getPath('userData')
+  const legacy = join(app.getPath('appData'), 'GenieEngine')
+  if (legacy === target || !existsSync(join(legacy, 'settings.json')) || existsSync(join(target, 'settings.json'))) return
+  try {
+    if (!existsSync(target)) {
+      renameSync(legacy, target)
+      return
+    }
+    for (const name of readdirSync(legacy)) {
+      if (!existsSync(join(target, name))) renameSync(join(legacy, name), join(target, name))
+    }
+  } catch (err) {
+    console.error('[gamifydesktop] could not carry over the GenieEngine data folder:', err)
+  }
 }
 
 export function loadSettings(): void {
@@ -74,6 +101,16 @@ export function getChatSlotSettings(): SettingsFile['chatSlots'] {
 
 export function setChatSlotSettings(slots: Record<ChatModelTier, ChatSlotSettings>): void {
   settings.chatSlots = slots
+  saveSettings()
+}
+
+export function getChatSourceSetting(): ChatSource | undefined {
+  const value = settings.chatSource
+  return value === 'gamify' || value === 'custom' ? value : undefined
+}
+
+export function setChatSourceSetting(source: ChatSource): void {
+  settings.chatSource = source
   saveSettings()
 }
 

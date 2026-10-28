@@ -5,7 +5,7 @@ import { sendToRenderer } from '../window'
 import { resolveCodex } from './binaries'
 import { loadTranscriptRecap, saveChatAttachments, saveChatUploads, type SavedUpload } from './chat-history'
 import { sandboxCommand } from './chat-sandbox'
-import { resolveChatSlot } from './chat-setup'
+import { resolveChatRoute } from './chat-setup'
 import { codexConfigOverrides, codexHome, PROXY_TOKEN_ENV } from './codex-config'
 import { itemToPart, type CodexItem, type CodexTurn } from './codex-items'
 import { CodexRpc, RpcError, type RpcId } from './codex-rpc'
@@ -20,7 +20,7 @@ import type { ChatAttachment, ChatModelTier, ChatPartUpdate, ChatQuestionRequest
  *
  * One app-server process runs per open project (it lives inside a sandbox
  * profile scoped to that project, see chat-sandbox.ts). The conversation is a
- * Codex thread, persisted in GenieEngine's CODEX_HOME so a reopened project
+ * Codex thread, persisted in GamifyDesktop's CODEX_HOME so a reopened project
  * continues it. Each message is a turn: progress streams in as item
  * notifications — text and reasoning deltas, shell commands, file edits, MCP
  * tool calls, subagent activity — so long agentic tasks show real activity
@@ -109,7 +109,7 @@ async function startServer(projectPath: string): Promise<CodexServer> {
   const codex = await resolveCodex()
   if (!codex) {
     throw new Error(
-      'The bundled Codex assistant is missing. Reinstall GenieEngine, or run `npm run setup` in development.'
+      'The bundled Codex assistant is missing. Reinstall GamifyDesktop, or run `npm run setup` in development.'
     )
   }
   const proxy = await ensureModelProxy()
@@ -131,7 +131,7 @@ async function startServer(projectPath: string): Promise<CodexServer> {
       CODEX_HOME: codexHome(),
       [PROXY_TOKEN_ENV]: proxy.token,
       ...(harness
-        ? { GENIEENGINE_HARNESS_PORT: String(harness.port), GENIEENGINE_HARNESS_TOKEN: harness.token }
+        ? { GAMIFYDESKTOP_HARNESS_PORT: String(harness.port), GAMIFYDESKTOP_HARNESS_TOKEN: harness.token }
         : {})
     },
     stdio: ['pipe', 'pipe', 'pipe']
@@ -168,7 +168,7 @@ async function startServer(projectPath: string): Promise<CodexServer> {
   try {
     await Promise.race([
       srv.rpc.request('initialize', {
-        clientInfo: { name: 'genieengine', title: 'GenieEngine', version: app.getVersion() },
+        clientInfo: { name: 'gamifydesktop', title: 'GamifyDesktop', version: app.getVersion() },
         capabilities: { experimentalApi: false, requestAttestation: false }
       }),
       sleep(30000).then(() => Promise.reject(new Error('timed out')))
@@ -286,10 +286,10 @@ function handleNotification(srv: CodexServer, method: string, params: any): void
       }
       break
     case 'mcpServer/startupStatus/updated':
-      if (params.status === 'failed') console.warn('[genieengine] MCP server failed to start:', params.name, params.error)
+      if (params.status === 'failed') console.warn('[gamifydesktop] MCP server failed to start:', params.name, params.error)
       break
     case 'configWarning':
-      console.warn('[genieengine] Codex config warning:', params.summary)
+      console.warn('[gamifydesktop] Codex config warning:', params.summary)
       break
   }
 }
@@ -379,7 +379,7 @@ function handleServerRequest(srv: CodexServer, id: RpcId, method: string, params
     case 'mcpServer/elicitation/request':
       return srv.rpc.respond(id, { action: 'decline', content: null, _meta: null })
     default:
-      return srv.rpc.respondError(id, -32601, `GenieEngine does not handle ${method}`)
+      return srv.rpc.respondError(id, -32601, `GamifyDesktop does not handle ${method}`)
   }
 }
 /* eslint-enable @typescript-eslint/no-explicit-any */
@@ -502,7 +502,9 @@ function turnErrorText(turn: CodexTurn, startedAt: number): string {
     /* plain text already */
   }
   const upstream = lastUpstreamFailure(startedAt)
-  if (upstream && TRANSIENT_ERROR_CODES.has(errorCode(turn))) text = upstream
+  // Codex words a quota error for ChatGPT plans; the provider's own text (a
+  // Gamify account out of credits, say) is the one that applies.
+  if (upstream && (TRANSIENT_ERROR_CODES.has(errorCode(turn)) || errorCode(turn) === 'usageLimitExceeded')) text = upstream
   return text
 }
 
@@ -556,7 +558,7 @@ async function runTurn(
   const before = snapshot
     ? await captureSnapshot(projectPath).catch((err: unknown) => {
         // Best-effort: the turn still runs, it just can't restore files on undo.
-        console.warn('[genieengine] project snapshot failed:', err)
+        console.warn('[gamifydesktop] project snapshot failed:', err)
         return null
       })
     : null
@@ -610,7 +612,14 @@ export async function sendChatMessage(
   try {
     // The most common first-run failure — explain it before Codex turns it
     // into an opaque 401 several retries later.
-    if (!(await resolveChatSlot(tier)).apiKey) {
+    const route = await resolveChatRoute(tier)
+    if (route.kind === 'gamify' && !route.token) {
+      throw new Error(
+        'The assistant runs on your Gamify account, but you are signed out.\n\n' +
+          'Open the AI settings (gear icon) and sign in again — or switch to your own models — then try again.'
+      )
+    }
+    if (route.kind === 'custom' && !route.apiKey) {
       throw new Error(
         `The ${tier === 'large' ? 'Large' : 'Medium'} chat model isn't connected yet — its API key is missing.\n\n` +
           'Open the AI settings (gear icon) and add the API key for its endpoint, then try again.'
@@ -634,7 +643,7 @@ export async function sendChatMessage(
     thread = threadId
     await applyPendingUndo(srv, projectPath, thread)
     // Asset uploads (zips, folders, models…) are copied into the project's
-    // .genieengine/attachments/ — the only place the sandboxed assistant can
+    // .gamifydesktop/attachments/ — the only place the sandboxed assistant can
     // reach them. Unlike the best-effort attachment saving below, a failure
     // here fails the whole send: the message must not describe files that
     // never arrived. The error text is user-readable (caps, unreadable
@@ -659,7 +668,7 @@ export async function sendChatMessage(
     const content = decodeTextAttachment(doc)
     if (content !== null) text += `\n\n[Attached file: ${doc.name}]\n\`\`\`\n${content}\n\`\`\``
   }
-  // Inline attachments are also saved under .genieengine/attachments/ with
+  // Inline attachments are also saved under .gamifydesktop/attachments/ with
   // their paths appended: a path is how the model gets back to a reference
   // image in later turns (view_image) and how the game-tester subagent —
   // which never sees this message — can compare a screenshot against it, and
@@ -674,14 +683,14 @@ export async function sendChatMessage(
   }
   // Asset uploads reach the model as paths only (copied above) — a zip or a
   // 40 MB GLB inline would be useless to it. The note also spells out the
-  // .genieengine/ catch: Godot ignores that directory, so assets must be
+  // .gamifydesktop/ catch: Godot ignores that directory, so assets must be
   // copied into the game tree to be usable.
   if (uploaded.length) {
     const list = uploaded.map((u) => (u.dir ? `${u.rel}/ (folder)` : u.rel)).join(', ')
     text +=
       `\n\n[The user uploaded asset file${uploaded.length > 1 ? 's' : ''} with this message, ` +
       `saved in the project at: ${list}. Explore what's inside — extract any .zip first ` +
-      '(e.g. `unzip -o <file>.zip -d <folder>`). Everything under .genieengine/ is invisible ' +
+      '(e.g. `unzip -o <file>.zip -d <folder>`). Everything under .gamifydesktop/ is invisible ' +
       'to Godot, so copy the files the game needs into the proper assets/ sub-folders ' +
       'before wiring them into scenes.]'
   }
@@ -714,7 +723,7 @@ export async function sendChatMessage(
         const detail = turn.status === 'failed' ? turnErrorText(turn, startedAt) : null
         const transient = detail !== null && (TRANSIENT_ERROR_CODES.has(errorCode(turn)) || TRANSIENT_PROVIDER_RE.test(detail))
         if (!transient || cancelled) break
-        console.warn(`[genieengine] transient provider error, resuming turn (attempt ${attempt + 1}):`, detail)
+        console.warn(`[gamifydesktop] transient provider error, resuming turn (attempt ${attempt + 1}):`, detail)
         await sleep(TRANSIENT_RETRY_DELAYS_MS[attempt])
         if (cancelled) break
         turn = await runTurn(

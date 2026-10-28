@@ -4,7 +4,7 @@
 // view on macOS (see platform/macos/editor/embedded_process_macos.mm).
 //
 // The hosting NSView returns nil from hitTest so all input continues to flow
-// to Electron's web contents; GenieEngine forwards input to the game over the
+// to Electron's web contents; GamifyDesktop forwards input to the game over the
 // debugger channel.
 
 #import <AppKit/AppKit.h>

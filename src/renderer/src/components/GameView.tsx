@@ -169,7 +169,7 @@ interface Props {
 }
 
 const MAX_LOG_LINES = 500
-const CONSOLE_HEIGHT_KEY = 'genieengine:consoleHeight'
+const CONSOLE_HEIGHT_KEY = 'gamifydesktop:consoleHeight'
 const CONSOLE_MIN = 80
 const CONSOLE_MAX = 600
 
@@ -364,12 +364,12 @@ export function GameView({
         </button>
         <h2>Press Run to start your game</h2>
         <p className="muted">
-          Your game runs right here in GenieEngine. Ask the assistant in the chat to build or change
+          Your game runs right here in GamifyDesktop. Ask the assistant in the chat to build or change
           anything.
         </p>
         {!godotPath && (
           <button className="warning-chip" onClick={onLocateGodot}>
-            Bundled Godot engine missing — reinstall GenieEngine, or click to locate one
+            Bundled Godot engine missing — reinstall GamifyDesktop, or click to locate one
           </button>
         )}
       </div>
@@ -389,7 +389,7 @@ export function GameView({
         <div className="stage-toolbar">
           <span
             className={`fps-badge${fps !== null && fps < 30 ? ' bad' : fps !== null && fps < 50 ? ' warn' : ''}`}
-            title="Frame rate measured in the game process. Per-minute stats (min/max/avg/1% low/0.1% low) are logged to .genieengine/perf.log"
+            title="Frame rate measured in the game process. Per-minute stats (min/max/avg/1% low/0.1% low) are logged to .gamifydesktop/perf.log"
           >
             {fps !== null ? `${Math.round(fps)} FPS` : '— FPS'}
           </span>

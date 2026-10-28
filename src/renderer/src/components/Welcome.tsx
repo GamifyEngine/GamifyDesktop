@@ -72,7 +72,7 @@ export function Welcome({
       <div className="welcome-card">
         <div className="welcome-head">
           <h1 className="logo">
-            <img src={logo} alt="" className="brand-mark-img big" /> GenieEngine
+            <img src={logo} alt="" className="brand-mark-img big" /> GamifyDesktop
           </h1>
           <div className="welcome-head-actions">
             <AdvancedToggle value={advancedMode} onChange={onToggleAdvancedMode} />

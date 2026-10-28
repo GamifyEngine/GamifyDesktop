@@ -34,7 +34,7 @@ interface TemplatesSource {
 /**
  * Export templates must match the engine exactly, so they're derived from
  * the binary that will run the export — the bundled engine, or the user's own
- * Godot install if they pointed GenieEngine at one — instead of a pinned
+ * Godot install if they pointed GamifyDesktop at one — instead of a pinned
  * version that can drift from it. `--version` prints e.g.
  * "4.7.2.stable.official.a13da4feb" ("4.8.beta1.…" for pre-releases,
  * "….mono.…" for .NET builds).
@@ -77,7 +77,7 @@ const PLATFORMS: PlatformSpec[] = [
     presetName: 'macOS',
     platform: 'macOS',
     outFile: (n) => `${n}.zip`,
-    extraOptions: (slug) => `application/bundle_identifier="ai.genieengine.${slug}"\n`
+    extraOptions: (slug) => `application/bundle_identifier="io.trygamify.games.${slug}"\n`
   },
   {
     id: 'linux',
@@ -105,7 +105,7 @@ const PLATFORMS: PlatformSpec[] = [
     presetName: 'iOS',
     platform: 'iOS',
     outFile: (n) => `${n}.ipa`,
-    extraOptions: (slug) => `application/bundle_identifier="ai.genieengine.${slug}"\n`
+    extraOptions: (slug) => `application/bundle_identifier="io.trygamify.games.${slug}"\n`
   }
 ]
 
@@ -299,7 +299,7 @@ function mergePresets(existing: string, specs: PlatformSpec[], slug: string): st
   if (existing !== '' && missing.length === 0) return null
 
   const blocks = [...kept.map((p) => p.body), ...missing.map((s) => presetBlock(s, slug))]
-  let out = '; Export presets — GenieEngine appends missing presets here; existing ones (including\n; presets configured in the Godot editor) are preserved as-is.\n'
+  let out = '; Export presets — GamifyDesktop appends missing presets here; existing ones (including\n; presets configured in the Godot editor) are preserved as-is.\n'
   blocks.forEach((body, i) => {
     const renumbered = body.replace(/^\[preset\.\d+(\.options)?\]/gm, (_m, opt: string | undefined) => `[preset.${i}${opt ?? ''}]`)
     out += '\n' + renumbered.trimEnd() + '\n'

@@ -1,5 +1,5 @@
 /* ==========================================================================
-   GenieEngine design system — dark mode only.
+   GamifyDesktop design system — dark mode only.
    ========================================================================== */
 
 :root {
@@ -2882,13 +2882,13 @@ button:disabled {
 }
 
 /* ==========================================================================
-   AI settings additions — reopenable panel + tabbed sections (coding agent /
-   2D asset generation / 3D asset generation)
+   AI settings additions — reopenable panel + tabbed sections (Gamify account /
+   own models / 2D asset generation / 3D asset generation)
    ========================================================================== */
 
 .setup-card {
   position: relative; /* anchors .setup-close */
-  max-width: 460px; /* roomier than the base card so three tab labels fit */
+  max-width: 520px; /* roomier than the base card so four tab labels fit */
   max-height: calc(100vh - 140px);
   overflow-y: auto;
 }
@@ -2921,6 +2921,66 @@ button:disabled {
 .setup-tab.active {
   color: var(--text);
   border-bottom-color: var(--accent);
+}
+
+/* The two source tabs (Gamify account / own models) carry a radio dot: the
+   one filled is what Save applies. */
+.setup-tab-radio {
+  display: inline-block;
+  width: 9px;
+  height: 9px;
+  margin-right: 5px;
+  vertical-align: -1px;
+  border-radius: 50%;
+  border: 1.5px solid var(--text-faint);
+}
+.setup-tab-radio.on {
+  border-color: var(--accent);
+  background: var(--accent);
+  box-shadow: inset 0 0 0 1.5px var(--bg-elevated);
+}
+
+/* Gamify Account tab */
+.gamify-account {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.gamify-avatar {
+  flex-shrink: 0;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--accent-soft);
+  color: var(--accent-hover);
+  font-weight: 700;
+  font-size: 14px;
+}
+.gamify-account-who {
+  flex: 1;
+  min-width: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+.gamify-account-name {
+  font-weight: 600;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.gamify-waiting {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: var(--radius-sm);
+  background: var(--accent-soft);
+  color: var(--text);
 }
 
 /* ==========================================================================

@@ -11,8 +11,8 @@ import { Workspace } from './components/Workspace'
 /** Which panel occupies the center pane. */
 type CenterView = 'game' | 'ecs'
 
-const SIDEBAR_WIDTH_KEY = 'genieengine:sidebarWidth'
-const ASPECT_KEY = 'genieengine:aspect'
+const SIDEBAR_WIDTH_KEY = 'gamifydesktop:sidebarWidth'
+const ASPECT_KEY = 'gamifydesktop:aspect'
 const ASPECT_MODES: AspectMode[] = ['any', 'desktop', 'mobile-portrait', 'mobile-landscape']
 // "3 inch" workspace sidebar ≈ 288px at 96dpi; default slightly wider.
 const SIDEBAR_DEFAULT = 300
@@ -61,7 +61,7 @@ export function App(): React.JSX.Element {
 
   // AI provider setup: fetched app-wide (not project-scoped) so the settings
   // gear works from both the title bar and the welcome screen. Re-checked on
-  // window focus so a setup completed elsewhere (another GenieEngine window
+  // window focus so a setup completed elsewhere (another GamifyDesktop window
   // or instance) clears the overlay without a restart.
   const [setup, setSetup] = useState<SetupStatus | null>(null)
   const [settingsOpen, setSettingsOpen] = useState(false)
@@ -197,7 +197,7 @@ export function App(): React.JSX.Element {
       {(needsSetup || settingsOpen) && setup && (
         <SetupOverlay
           status={setup}
-          onConfigured={setSetup}
+          onStatusChange={setSetup}
           onClose={needsSetup ? undefined : () => setSettingsOpen(false)}
         />
       )}
@@ -243,6 +243,7 @@ export function App(): React.JSX.Element {
             project={project}
             width={sidebarWidth}
             assistantAvailable={assistantAvailable}
+            chatSource={setup?.source ?? 'custom'}
             advancedMode={advancedMode}
           />
         </div>

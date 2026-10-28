@@ -3,6 +3,7 @@ import { homedir } from 'node:os'
 import { join } from 'node:path'
 import type {
   ChatModelTier,
+  ChatSource,
   ModelSlotRequest,
   ModelSlotStatus,
   ReasoningEffort,
@@ -10,9 +11,17 @@ import type {
   SetupStatus,
   ThinkingMode
 } from '../../shared/types'
-import { getChatSlotSettings, getSettings, setChatSlotSettings, type ChatSlotSettings } from '../state'
+import {
+  getChatSlotSettings,
+  getChatSourceSetting,
+  getSettings,
+  setChatSlotSettings,
+  setChatSourceSetting,
+  type ChatSlotSettings
+} from '../state'
 import { credentialsStore } from './asset-store'
-import { isGptImageConfigured, saveGptImageConfig } from './gptimage'
+import { GAMIFY_IMAGE_MODEL, GAMIFY_SITE, gamifyIncludesImages, gamifyToken, getGamifyStatus } from './gamify-account'
+import { isGptImageConfigured, ownImageRoute, saveGptImageConfig, type ImageRoute } from './gptimage'
 import { isHy3dConfigured, saveHy3dCredentials } from './hy3d'
 
 /**
@@ -30,13 +39,18 @@ import { isHy3dConfigured, saveHy3dCredentials } from './hy3d'
  *
  * Every slot has its own endpoint, model, thinking/effort choice and API key.
  * Endpoints must speak the OpenAI Responses API — the only wire protocol
- * Codex supports. Settings live in GenieEngine's settings file; keys live in
+ * Codex supports. Settings live in GamifyDesktop's settings file; keys live in
  * one owner-only credential file per slot. Neither is ever handed to Codex:
  * Codex talks to the local model proxy, which looks the slot up per request
  * and attaches the key itself (see model-proxy.ts), so the agent's shell
  * commands can never read a key. Per-slot files also mean saving one slot can
  * never clobber another's key; "leave the key blank to reuse the Medium key"
  * still works, as a COPY into the slot's own file at save time.
+ *
+ * All of that is the "own models" option. The other is the user's Gamify
+ * account (gamify-account.ts): both slots then go to the Gamify backend,
+ * which picks the model, and the account's credits pay for it. Which of the
+ * two the assistant uses is the chat source, chosen in the setup panel.
  */
 
 export const DEFAULT_ENDPOINT = 'https://openrouter.ai/api/v1'
@@ -116,6 +130,47 @@ export async function resolveChatSlot(tier: ChatModelTier): Promise<ResolvedChat
   return { ...settings, apiKey: await slotKey(tier, settings.endpoint) }
 }
 
+/**
+ * Which option the assistant runs on. Until the user picks one in the setup
+ * panel: their own models when keys are already set up (an upgrade from a
+ * version without Gamify accounts, or a development key in the
+ * environment), otherwise the Gamify account.
+ */
+export async function chatSource(): Promise<ChatSource> {
+  const chosen = getChatSourceSetting()
+  if (chosen) return chosen
+  for (const tier of TIERS) {
+    if ((await resolveChatSlot(tier)).apiKey) return 'custom'
+  }
+  return 'gamify'
+}
+
+/** Where a request on a slot goes: the Gamify backend (with the account's token, null when signed out) or the slot's own endpoint. */
+export type ChatRoute =
+  | { kind: 'gamify'; endpoint: string; token: string | null }
+  | ({ kind: 'custom' } & ResolvedChatSlot)
+
+/** Read fresh per request, like resolveChatSlot — a source switch applies to the very next one. */
+export async function resolveChatRoute(tier: ChatModelTier): Promise<ChatRoute> {
+  if ((await chatSource()) === 'gamify') return { kind: 'gamify', endpoint: `${GAMIFY_SITE}/v1`, token: await gamifyToken() }
+  return { kind: 'custom', ...(await resolveChatSlot(tier)) }
+}
+
+/**
+ * Where generate_2d_asset runs, or null when it isn't available: on the
+ * Gamify account while the assistant does (unless its image generation is
+ * off), otherwise with the user's own OpenAI key.
+ */
+export async function imageGenerationRoute(): Promise<ImageRoute | null> {
+  if ((await chatSource()) === 'gamify' && gamifyIncludesImages()) {
+    const token = await gamifyToken()
+    if (token) {
+      return { baseUrl: `${GAMIFY_SITE}/v1`, bearer: token, model: GAMIFY_IMAGE_MODEL, provider: new URL(GAMIFY_SITE).host, gamify: true }
+    }
+  }
+  return ownImageRoute()
+}
+
 export async function getSetupStatus(): Promise<SetupStatus> {
   const slotStatus = async (tier: ChatModelTier): Promise<ModelSlotStatus> => {
     const slot = await resolveChatSlot(tier)
@@ -129,10 +184,14 @@ export async function getSetupStatus(): Promise<SetupStatus> {
   }
   const medium = await slotStatus('medium')
   const large = await slotStatus('large')
+  const source = await chatSource()
+  const gamify = await getGamifyStatus()
   return {
-    // The chat dropdown can route any message to either slot, so the chat
-    // only counts as connected once both have usable credentials.
-    configured: medium.configured && large.configured,
+    source,
+    // Own models: the chat dropdown can route any message to either slot, so
+    // the chat only counts as connected once both have usable credentials.
+    configured: source === 'gamify' ? gamify.signedIn : medium.configured && large.configured,
+    gamify,
     medium,
     large,
     hy3dConfigured: await isHy3dConfigured(),
@@ -181,6 +240,7 @@ export async function saveSetup(request: SetupRequest): Promise<void> {
     if (key) await credentials[tier].save({ apiKey: key })
     else await credentials[tier].clear()
   }
+  setChatSourceSetting(request.source === 'gamify' ? 'gamify' : 'custom')
 }
 
 /**
