@@ -16,7 +16,7 @@ import { assetDir, credentialsStore } from './asset-store'
  * need.
  */
 
-export const IMAGE_MODEL = 'gpt-image-1.5'
+export const IMAGE_MODEL = 'gpt-image-2.6-sunburst'
 // Overridable for tests/proxies; the OpenAI SDK honors the same variable.
 const BASE_URL = process.env.OPENAI_BASE_URL || 'https://api.openai.com/v1'
 
